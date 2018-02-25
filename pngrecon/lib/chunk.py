@@ -1,12 +1,6 @@
+from ..util.log import log
 import struct
 import zlib
-import sys
-
-
-def _log(*s):
-    if s:
-        print(*s, file=sys.stderr)
-PNG_SIG = b'\x89PNG\r\n\x1a\n'
 
 
 def read_image_stream(stream):
@@ -21,7 +15,6 @@ def read_image_stream(stream):
         c = Chunk.from_byte_stream(stream)
         chunks.append(c)
     return chunks
-
 
 
 class Chunk():
@@ -46,7 +39,7 @@ class Chunk():
         # but what may not be true is that the calculated crc matches the
         # given crc
         if chunk.crc != chunk_crc:
-            _log('Created chunk of type', chunk.type, 'and its CRC doesn\'t '
+            log('Created chunk of type', chunk.type, 'and its CRC doesn\'t '
                 'match the given one.')
         return chunk
 
@@ -88,5 +81,12 @@ class Chunk():
         ''' the length, type, data, and crc all smooshed together like it would
         appear in a PNG file'''
         if not self.is_valid:
-            _log('Returning raw_bytes for Chunk that is not valid')
+            log('Returning raw_bytes for Chunk that is not valid')
         return self._data
+
+
+CUSTOM_TYPE = 'maTt'
+PNG_SIG = b'\x89PNG\r\n\x1a\n'
+IHDR = Chunk('IHDR', struct.pack('>IIBBBBB', 1, 1, 1, 0, 0, 0, 0))
+IDAT = Chunk('IDAT', zlib.compress(struct.pack('>BB', 0, 0)))
+IEND = Chunk('IEND', b'')
