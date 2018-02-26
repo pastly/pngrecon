@@ -1,7 +1,6 @@
 from ..lib.chunk import read_image_stream
-from ..lib.chunk import CUSTOM_TYPE
+from ..lib.chunk import decode_chunks_to_bytes
 from argparse import ArgumentDefaultsHelpFormatter
-import zlib
 
 
 def gen_parser(sub_p):
@@ -16,7 +15,6 @@ def gen_parser(sub_p):
 def main(args):
     with open(args.input, 'rb') as fd:
         chunks = read_image_stream(fd)
+    b = decode_chunks_to_bytes(chunks)
     with open(args.output, 'wb') as fd:
-        for c in chunks:
-            if c.type == CUSTOM_TYPE:
-                fd.write(zlib.decompress(c.data))
+        fd.write(b)

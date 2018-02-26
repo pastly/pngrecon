@@ -1,4 +1,5 @@
 from ..util.log import log
+from ..util.log import fail_hard
 import struct
 import zlib
 from enum import Enum
@@ -16,6 +17,50 @@ def read_image_stream(stream):
         c = Chunk.from_byte_stream(stream)
         chunks.append(c)
     return chunks
+
+
+def encode_stream_as_chunks(stream):
+    ''' The input stream should contain bytes that the user wishes to encode
+    into a PNG. If seekable, seek to the start. Otherwise assume we are at the
+    start of the data the user wishes to encode.
+
+    Returns an ordered list of all the chunks that need to be stored in the
+    image. '''
+    if stream.seekable():
+        stream.seek(0, 0)
+    bites = []
+    while len(stream.peek(1)) > 0:
+        bites.append(stream.read(MAX_DATA_CHUNK_BYTES))
+    index_chunk = IndexChunk(
+        EncodingType.SingleFile, CompressMethod.No, len(bites))
+    data_chunks = [DataChunk(CompressMethod.No, bite) for bite in bites]
+    return [index_chunk] + data_chunks
+
+
+def decode_chunks_to_bytes(chunks):
+    ''' The input stream should contain a bunch of Chunks. All of them do not
+    need to be known chunk types, but the right number and order of known
+    chunk types should be present. '''
+    index_chunk = None
+    return_bytes = b''
+    for chunk in chunks:
+        # TODO: Determining if a chunk is one we care about by using exceptions
+        # is ugly. It may even be uncomfortably slow. Replace with something
+        # better. One idea: an lre_cache'ed function that catches exceptions
+        try:
+            ChunkType(chunk.type)
+        except ValueError:
+            continue
+        chunk_type = ChunkType(chunk.type)
+        if index_chunk is None and chunk_type != ChunkType.Index:
+            fail_hard('Malformed: first of our chunks should be an IndexChunk')
+        if index_chunk is None:
+            assert chunk_type == ChunkType.Index
+            index_chunk = chunk
+            continue
+        elif chunk_type == ChunkType.Data:
+            return_bytes += chunk.data
+    return return_bytes
 
 
 class Chunk():
@@ -97,15 +142,19 @@ class EncodingType(Enum):
 
 
 class CompressMethod(Enum):
-    Zlib = 1
+    No = 1
+    Zlib = 2
 
 
 class IndexChunk(Chunk):
-    def __init__(self, encoding_type, compress_method):
+    def __init__(self, encoding_type, compress_method, num_data_chunks):
         assert isinstance(encoding_type, EncodingType)
         assert isinstance(compress_method, CompressMethod)
+        assert num_data_chunks >= 0
         chunk_type = ChunkType.Index
-        data = struct.pack('>II', encoding_type.value, compress_method.value)
+        data = struct.pack(
+            '>III', encoding_type.value, compress_method.value,
+            num_data_chunks)
         super().__init__(chunk_type.value, data)
 
     @property
@@ -131,7 +180,20 @@ class IndexChunk(Chunk):
         # throws ValueError if not valid
         return CompressMethod(m)
 
+    @property
+    def num_data_chunks(self):
+        n, = struct.unpack_from('>I', self.data, 8)
+        return n
 
+
+class DataChunk(Chunk):
+    def __init__(self, compress_method, data):
+        assert isinstance(compress_method, CompressMethod)
+        chunk_type = ChunkType.Data
+        super().__init__(chunk_type.value, data)
+
+
+MAX_DATA_CHUNK_BYTES = 1 * 1024 * 1024 * 1024  # 1 GiB
 CUSTOM_TYPE = 'maTt'
 PNG_SIG = b'\x89PNG\r\n\x1a\n'
 IHDR = Chunk('IHDR', struct.pack('>IIBBBBB', 1, 1, 1, 0, 0, 0, 0))

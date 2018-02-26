@@ -1,13 +1,12 @@
-from ..lib.chunk import Chunk
 from ..lib.chunk import read_image_stream
-from ..lib.chunk import (CUSTOM_TYPE, PNG_SIG, IHDR, IDAT, IEND)
+from ..lib.chunk import encode_stream_as_chunks
+from ..lib.chunk import (PNG_SIG, IHDR, IDAT, IEND)
 from ..util.log import fail_hard
 from argparse import ArgumentDefaultsHelpFormatter
 import os
-import zlib
 
 
-def encode_with_source_image(args, data_chunk):
+def encode_with_source_image(args, data_chunks):
     with open(args.source, 'rb') as fd:
         source_chunks = read_image_stream(fd)
     if source_chunks[-1].type != 'IEND':
@@ -17,7 +16,8 @@ def encode_with_source_image(args, data_chunk):
         fd.write(PNG_SIG)
         for c in source_chunks[0:-1]:
             fd.write(c.raw_data)
-        fd.write(data_chunk.raw_data)
+        for c in data_chunks:
+            fd.write(c.raw_data)
         fd.write(source_chunks[-1].raw_data)
 
 
@@ -38,13 +38,13 @@ def main(args):
     if args.source is not None and not os.path.isfile(args.source):
         fail_hard(args.source, 'must exist')
     with open(args.input, 'rb') as fd:
-        in_data = zlib.compress(fd.read())
-    d = Chunk(CUSTOM_TYPE, in_data)
+        chunks = encode_stream_as_chunks(fd)
     if args.source:
-        return encode_with_source_image(args, d)
+        return encode_with_source_image(args, chunks)
     with open(args.output, 'wb') as fd:
         fd.write(PNG_SIG)
         fd.write(IHDR.raw_data)
         fd.write(IDAT.raw_data)
-        fd.write(d.raw_data)
+        for c in chunks:
+            fd.write(c.raw_data)
         fd.write(IEND.raw_data)
