@@ -29,7 +29,7 @@ def gen_parser(sub_p):
     p.add_argument('-o', '--output', type=str, default='/dev/stdout',
                    help='Where to write data')
     p.add_argument(
-        '--source', type=str, default=None,
+        '-s', '--source', type=str, default=None,
         help='Use the specified source PNG as a base instead of the tiny '
         'default base PNG')
 
