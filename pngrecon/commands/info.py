@@ -5,7 +5,7 @@ from argparse import ArgumentDefaultsHelpFormatter
 
 def gen_parser(sub_p):
     p = sub_p.add_parser('info', formatter_class=ArgumentDefaultsHelpFormatter)
-    p.add_argument('image')
+    p.add_argument('image', nargs='?', default='/dev/stdin')
 
 
 def main(args):
