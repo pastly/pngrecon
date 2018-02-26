@@ -30,6 +30,8 @@ setup(
     # url='',
     author='Matt Traudt',
     author_email='sirmatt@ksu.edu',
+    maintainer='Matt Traudt',
+    maintainer_email='sirmatt@ksu.edu',
     # license='MIT',
     # https://packaging.python.org/tutorials/distributing-packages/#id48
     # https://pypi.python.org/pypi?%3Aaction=list_classifiers
