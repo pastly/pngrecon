@@ -19,7 +19,19 @@ def read_image_stream(stream):
     return chunks
 
 
-def encode_stream_as_chunks(stream):
+def _break_stream_into_bites(stream, compress_method):
+    bites = []
+    while len(stream.peek(1)) > 0:
+        if compress_method == CompressMethod.No:
+            bites.append(stream.read(MAX_DATA_CHUNK_BYTES))
+        elif compress_method == CompressMethod.Zlib:
+            bites.append(zlib.compress(stream.read(MAX_DATA_CHUNK_BYTES)))
+        else:
+            fail_hard('Unknown compression method', compress_method)
+    return bites
+
+
+def encode_stream_as_chunks(stream, compress_method):
     ''' The input stream should contain bytes that the user wishes to encode
     into a PNG. If seekable, seek to the start. Otherwise assume we are at the
     start of the data the user wishes to encode.
@@ -28,11 +40,9 @@ def encode_stream_as_chunks(stream):
     image. '''
     if stream.seekable():
         stream.seek(0, 0)
-    bites = []
-    while len(stream.peek(1)) > 0:
-        bites.append(stream.read(MAX_DATA_CHUNK_BYTES))
+    bites = _break_stream_into_bites(stream, compress_method)
     index_chunk = IndexChunk(
-        EncodingType.SingleFile, CompressMethod.No, len(bites))
+        EncodingType.SingleFile, compress_method, len(bites))
     data_chunks = [DataChunk(bite) for bite in bites]
     return [index_chunk] + data_chunks
 
@@ -62,9 +72,16 @@ def decode_chunks_to_bytes(chunks):
             expected_data_chunks = index_chunk.num_data_chunks
             continue
         elif chunk_type == ChunkType.Data:
+            assert index_chunk is not None
             assert expected_data_chunks is not None
             expected_data_chunks -= 1
-            return_bytes += chunk.data
+            if index_chunk.compress_method == CompressMethod.No:
+                return_bytes += chunk.data
+            elif index_chunk.compress_method == CompressMethod.Zlib:
+                return_bytes += zlib.decompress(chunk.data)
+            else:
+                fail_hard('Unknown compression method',
+                          index_chunk.compress_method)
         if expected_data_chunks < 1:
             return return_bytes
     if expected_data_chunks > 0:
@@ -211,7 +228,14 @@ class DataChunk(Chunk):
         super().__init__(chunk_type.value, data)
 
 
-MAX_DATA_CHUNK_BYTES = 1 * 1024 * 1024 * 1024  # 1 GiB
+# The max size should be less than the actual PNG-spec max size. When deciding
+# how much data to put into a DataChunk, we decide **before** compression. If
+# the data is not compressible, we could end up with more bytes than we
+# started with.
+#
+# The good news is the max size in the PNG spec is "like" 4 GiB (based on the
+# chunk length field in chunk headers being a 32-bit uint)
+MAX_DATA_CHUNK_BYTES = 100 * 1024 * 1024  # 100 MiB
 CUSTOM_TYPE = 'maTt'
 PNG_SIG = b'\x89PNG\r\n\x1a\n'
 IHDR = Chunk('IHDR', struct.pack('>IIBBBBB', 1, 1, 1, 0, 0, 0, 0))

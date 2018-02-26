@@ -1,5 +1,6 @@
 from ..lib.chunk import read_image_stream
 from ..lib.chunk import encode_stream_as_chunks
+from ..lib.chunk import CompressMethod
 from ..lib.chunk import (PNG_SIG, IHDR, IDAT, IEND)
 from ..util.log import fail_hard
 from argparse import ArgumentDefaultsHelpFormatter
@@ -32,13 +33,22 @@ def gen_parser(sub_p):
         '-s', '--source', type=str, default=None,
         help='Use the specified source PNG as a base instead of the tiny '
         'default base PNG')
+    p.add_argument(
+        '-c', '--compress', type=str, default='no',
+        choices=['no', 'gzip'], help='Compress data before encoding')
 
 
 def main(args):
     if args.source is not None and not os.path.isfile(args.source):
         fail_hard(args.source, 'must exist')
+    if args.compress == 'no':
+        compress_method = CompressMethod.No
+    elif args.compress == 'gzip':
+        compress_method = CompressMethod.Zlib
+    else:
+        fail_hard('Unknown --compress value', args.compress)
     with open(args.input, 'rb') as fd:
-        chunks = encode_stream_as_chunks(fd)
+        chunks = encode_stream_as_chunks(fd, compress_method)
     if args.source:
         return encode_with_source_image(args, chunks)
     with open(args.output, 'wb') as fd:
