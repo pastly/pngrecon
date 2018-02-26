@@ -1,7 +1,6 @@
 import pngrecon.commands.info
 import pngrecon.commands.encode
 import pngrecon.commands.decode
-import pngrecon.commands.testing
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 
@@ -14,7 +13,6 @@ def create_parser():
     pngrecon.commands.info.gen_parser(sub_p)
     pngrecon.commands.encode.gen_parser(sub_p)
     pngrecon.commands.decode.gen_parser(sub_p)
-    pngrecon.commands.testing.gen_parser(sub_p)
     return p
 
 
@@ -30,8 +28,6 @@ def main():
                    'a': def_args, 'kw': def_kwargs},
         'decode': {'f': pngrecon.commands.decode.main,
                    'a': def_args, 'kw': def_kwargs},
-        'testing': {'f': pngrecon.commands.testing.main,
-                    'a': def_args, 'kw': def_kwargs},
     }
     try:
         if args.command not in known_commands:
