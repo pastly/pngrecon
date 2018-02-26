@@ -33,7 +33,7 @@ def encode_stream_as_chunks(stream):
         bites.append(stream.read(MAX_DATA_CHUNK_BYTES))
     index_chunk = IndexChunk(
         EncodingType.SingleFile, CompressMethod.No, len(bites))
-    data_chunks = [DataChunk(CompressMethod.No, bite) for bite in bites]
+    data_chunks = [DataChunk(bite) for bite in bites]
     return [index_chunk] + data_chunks
 
 
@@ -187,8 +187,7 @@ class IndexChunk(Chunk):
 
 
 class DataChunk(Chunk):
-    def __init__(self, compress_method, data):
-        assert isinstance(compress_method, CompressMethod)
+    def __init__(self, data):
         chunk_type = ChunkType.Data
         super().__init__(chunk_type.value, data)
 
