@@ -1,6 +1,7 @@
 from ..util.log import log
 import struct
 import zlib
+from enum import Enum
 
 
 def read_image_stream(stream):
@@ -22,6 +23,7 @@ class Chunk():
         chunk_type = bytes(chunk_type, 'utf-8')
         self._data = struct.pack('>I', len(data)) + chunk_type + data +\
             struct.pack('>I', zlib.crc32(chunk_type + data))
+        assert self.is_valid
 
     @classmethod
     def from_byte_stream(cls, stream):
@@ -83,6 +85,51 @@ class Chunk():
         if not self.is_valid:
             log('Returning raw_bytes for Chunk that is not valid')
         return self._data
+
+
+class ChunkType(Enum):
+    Index = 'deQm'
+    Data = 'maTt'
+
+
+class EncodingType(Enum):
+    SingleFile = 1
+
+
+class CompressMethod(Enum):
+    Zlib = 1
+
+
+class IndexChunk(Chunk):
+    def __init__(self, encoding_type, compress_method):
+        assert isinstance(encoding_type, EncodingType)
+        assert isinstance(compress_method, CompressMethod)
+        chunk_type = ChunkType.Index
+        data = struct.pack('>II', encoding_type.value, compress_method.value)
+        super().__init__(chunk_type.value, data)
+
+    @property
+    def is_valid(self):
+        if not super().is_valid:
+            return False
+        try:
+            self.encoding_type
+            self.compress_method
+        except ValueError:
+            return False
+        return True
+
+    @property
+    def encoding_type(self):
+        t, = struct.unpack_from('>I', self.data, 0)
+        # throws ValueError if not valid
+        return EncodingType(t)
+
+    @property
+    def compress_method(self):
+        m, = struct.unpack_from('>I', self.data, 4)
+        # throws ValueError if not valid
+        return CompressMethod(m)
 
 
 CUSTOM_TYPE = 'maTt'
