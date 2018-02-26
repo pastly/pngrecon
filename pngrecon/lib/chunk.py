@@ -42,6 +42,7 @@ def decode_chunks_to_bytes(chunks):
     need to be known chunk types, but the right number and order of known
     chunk types should be present. '''
     index_chunk = None
+    expected_data_chunks = None
     return_bytes = b''
     for chunk in chunks:
         # TODO: Determining if a chunk is one we care about by using exceptions
@@ -56,10 +57,18 @@ def decode_chunks_to_bytes(chunks):
             fail_hard('Malformed: first of our chunks should be an IndexChunk')
         if index_chunk is None:
             assert chunk_type == ChunkType.Index
-            index_chunk = chunk
+            assert expected_data_chunks is None
+            index_chunk = IndexChunk.from_chunk(chunk)
+            expected_data_chunks = index_chunk.num_data_chunks
             continue
         elif chunk_type == ChunkType.Data:
+            assert expected_data_chunks is not None
+            expected_data_chunks -= 1
             return_bytes += chunk.data
+        if expected_data_chunks < 1:
+            return return_bytes
+    if expected_data_chunks > 0:
+        fail_hard('Missing', expected_data_chunks, 'more DataChunks')
     return return_bytes
 
 
@@ -156,6 +165,16 @@ class IndexChunk(Chunk):
             '>III', encoding_type.value, compress_method.value,
             num_data_chunks)
         super().__init__(chunk_type.value, data)
+
+    @classmethod
+    def from_chunk(cls, chunk):
+        assert isinstance(chunk, Chunk)
+        encoding_type, compress_method, num_data_chunks = struct.unpack(
+            '>III', chunk.data)
+        encoding_type = EncodingType(encoding_type)
+        compress_method = CompressMethod(compress_method)
+        c = IndexChunk(encoding_type, compress_method, num_data_chunks)
+        return c
 
     @property
     def is_valid(self):
