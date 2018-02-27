@@ -97,8 +97,10 @@ def gen_parser(sub_p):
         help='Use the specified source PNG as a base instead of the tiny '
         'default base PNG')
     p.add_argument(
-        '-c', '--compress', type=str, default='no',
-        choices=['no', 'gzip'], help='Compress data before encoding')
+        '-c', '--compress', type=str, default='no', nargs='?',
+        choices=['no', 'gzip'], help='Compress data before encoding. If not '
+        'specified, do not compress. If specified with no argument, compress '
+        'with gzip. Otherwise, compress according to the argument.')
     p.add_argument(
         '-e', '--encrypt', action='store_true', help='If specified, encrypt '
         'data before encoding')
@@ -110,6 +112,8 @@ def main(args):
     if args.compress == 'no':
         compress_method = CompressMethod.No
     elif args.compress == 'gzip':
+        compress_method = CompressMethod.Zlib
+    elif args.compress is None:
         compress_method = CompressMethod.Zlib
     else:
         fail_hard('Unknown --compress value', args.compress)
