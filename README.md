@@ -2,6 +2,12 @@
 
 Hide arbitrary data in plain site. Stuff files in PNGs and retrieve them later.
 
+Optionally compress data.
+
+Optionally encrypt data with a symmetric key derived from a salted password.
+
+FIXME: encryption password is always 'password'
+
 # Install
 
 1. Clone this repo.
@@ -20,8 +26,7 @@ By default, they both read from stdin and write to stdout.
 
 ## Example usage
 
-Demonstrate data can be encoded and then decoded successfully (your sha1sum
-will be different).
+Demonstrates data can be encoded and then decoded successfully.
 
     (venv) user@host$ sha1sum README.md
     1e2e72803fe66b8cdc2e7bfdf1eba6cf64584d2a  README.md
