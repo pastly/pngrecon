@@ -109,6 +109,10 @@ def gen_parser(sub_p):
 def main(args):
     if args.source is not None and not os.path.isfile(args.source):
         fail_hard(args.source, 'must exist')
+    if not os.path.exists(args.input):
+        fail_hard(args.input, 'must exist')
+    if os.path.isdir(args.input):
+        fail_hard('Input can\'t be a directory')
     if args.compress == 'no':
         compress_method = CompressMethod.No
     elif args.compress == 'gzip':
