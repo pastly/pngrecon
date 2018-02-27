@@ -19,76 +19,6 @@ def read_image_stream(stream):
     return chunks
 
 
-def _break_stream_into_bites(stream, compress_method):
-    bites = []
-    while len(stream.peek(1)) > 0:
-        if compress_method == CompressMethod.No:
-            bites.append(stream.read(MAX_DATA_CHUNK_BYTES))
-        elif compress_method == CompressMethod.Zlib:
-            bites.append(zlib.compress(stream.read(MAX_DATA_CHUNK_BYTES)))
-        else:
-            fail_hard('Unknown compression method', compress_method)
-    return bites
-
-
-def encode_stream_as_chunks(stream, compress_method):
-    ''' The input stream should contain bytes that the user wishes to encode
-    into a PNG. If seekable, seek to the start. Otherwise assume we are at the
-    start of the data the user wishes to encode.
-
-    Returns an ordered list of all the chunks that need to be stored in the
-    image. '''
-    if stream.seekable():
-        stream.seek(0, 0)
-    bites = _break_stream_into_bites(stream, compress_method)
-    index_chunk = IndexChunk(
-        EncodingType.SingleFile, compress_method, len(bites))
-    data_chunks = [DataChunk(bite) for bite in bites]
-    return [index_chunk] + data_chunks
-
-
-def decode_chunks_to_bytes(chunks):
-    ''' The input stream should contain a bunch of Chunks. All of them do not
-    need to be known chunk types, but the right number and order of known
-    chunk types should be present. '''
-    index_chunk = None
-    expected_data_chunks = None
-    return_bytes = b''
-    for chunk in chunks:
-        # TODO: Determining if a chunk is one we care about by using exceptions
-        # is ugly. It may even be uncomfortably slow. Replace with something
-        # better. One idea: an lre_cache'ed function that catches exceptions
-        try:
-            ChunkType(chunk.type)
-        except ValueError:
-            continue
-        chunk_type = ChunkType(chunk.type)
-        if index_chunk is None and chunk_type != ChunkType.Index:
-            fail_hard('Malformed: first of our chunks should be an IndexChunk')
-        if index_chunk is None:
-            assert chunk_type == ChunkType.Index
-            assert expected_data_chunks is None
-            index_chunk = IndexChunk.from_chunk(chunk)
-            expected_data_chunks = index_chunk.num_data_chunks
-            continue
-        elif chunk_type == ChunkType.Data:
-            assert index_chunk is not None
-            assert expected_data_chunks is not None
-            expected_data_chunks -= 1
-            if index_chunk.compress_method == CompressMethod.No:
-                return_bytes += chunk.data
-            elif index_chunk.compress_method == CompressMethod.Zlib:
-                return_bytes += zlib.decompress(chunk.data)
-            else:
-                fail_hard('Unknown compression method',
-                          index_chunk.compress_method)
-        if expected_data_chunks < 1:
-            return return_bytes
-    if expected_data_chunks > 0:
-        fail_hard('Missing', expected_data_chunks, 'more DataChunks')
-    return return_bytes
-
-
 class Chunk():
     def __init__(self, chunk_type, data):
         chunk_type = bytes(chunk_type, 'utf-8')
@@ -115,6 +45,10 @@ class Chunk():
             log('Created chunk of type', chunk.type, 'and its CRC doesn\'t '
                 'match the given one.')
         return chunk
+
+    @classmethod
+    def from_chunk(cls, chunk):
+        fail_hard('Not implemented for class', cls.__name__)
 
     @property
     def length(self):
@@ -161,10 +95,16 @@ class Chunk():
 class ChunkType(Enum):
     Index = 'deQm'
     Data = 'maTt'
+    CryptInfo = 'yyBo'
 
 
 class EncodingType(Enum):
     SingleFile = 1
+
+
+class EncryptionType(Enum):
+    No = 1
+    SaltedPass01 = 2
 
 
 class CompressMethod(Enum):
@@ -173,24 +113,28 @@ class CompressMethod(Enum):
 
 
 class IndexChunk(Chunk):
-    def __init__(self, encoding_type, compress_method, num_data_chunks):
+    def __init__(self, encoding_type, encryption_type, compress_method,
+                 num_data_chunks):
         assert isinstance(encoding_type, EncodingType)
+        assert isinstance(encryption_type, EncryptionType)
         assert isinstance(compress_method, CompressMethod)
         assert num_data_chunks >= 0
         chunk_type = ChunkType.Index
         data = struct.pack(
-            '>III', encoding_type.value, compress_method.value,
-            num_data_chunks)
+            '>IIII', encoding_type.value, encryption_type.value,
+            compress_method.value, num_data_chunks)
         super().__init__(chunk_type.value, data)
 
     @classmethod
     def from_chunk(cls, chunk):
         assert isinstance(chunk, Chunk)
-        encoding_type, compress_method, num_data_chunks = struct.unpack(
-            '>III', chunk.data)
+        encoding_type, encryption_type, compress_method, num_data_chunks = \
+            struct.unpack('>IIII', chunk.data)
         encoding_type = EncodingType(encoding_type)
+        encryption_type = EncryptionType(encryption_type)
         compress_method = CompressMethod(compress_method)
-        c = IndexChunk(encoding_type, compress_method, num_data_chunks)
+        c = IndexChunk(encoding_type, encryption_type, compress_method,
+                       num_data_chunks)
         return c
 
     @property
@@ -199,8 +143,11 @@ class IndexChunk(Chunk):
             return False
         try:
             self.encoding_type
+            self.encryption_type
             self.compress_method
         except ValueError:
+            return False
+        if self.num_data_chunks < 0:
             return False
         return True
 
@@ -211,14 +158,20 @@ class IndexChunk(Chunk):
         return EncodingType(t)
 
     @property
+    def encryption_type(self):
+        t, = struct.unpack_from('>I', self.data, 4)
+        # throws ValueError if not valid
+        return EncryptionType(t)
+
+    @property
     def compress_method(self):
-        m, = struct.unpack_from('>I', self.data, 4)
+        m, = struct.unpack_from('>I', self.data, 8)
         # throws ValueError if not valid
         return CompressMethod(m)
 
     @property
     def num_data_chunks(self):
-        n, = struct.unpack_from('>I', self.data, 8)
+        n, = struct.unpack_from('>I', self.data, 12)
         return n
 
 
@@ -227,16 +180,50 @@ class DataChunk(Chunk):
         chunk_type = ChunkType.Data
         super().__init__(chunk_type.value, data)
 
+    @classmethod
+    def from_chunk(cls, chunk):
+        assert isinstance(chunk, Chunk)
+        c = DataChunk(chunk.data)
+        return c
+
+    @property
+    def is_valid(self):
+        return super().is_valid
+
+
+class CryptInfoChunk(Chunk):
+    def __init__(self, salt):
+        assert isinstance(salt, bytes)
+        assert len(salt) == 16
+        chunk_type = ChunkType.CryptInfo
+        data = struct.pack('>16s', salt)
+        super().__init__(chunk_type.value, data)
+
+    @classmethod
+    def from_chunk(cls, chunk):
+        assert isinstance(chunk, Chunk)
+        s, = struct.unpack('>16s', chunk.data)
+        c = CryptInfoChunk(s)
+        return c
+
+    @property
+    def salt(self):
+        s, = struct.unpack_from('>16s', self.data, 0)
+        return s
+
+    @property
+    def is_valid(self):
+        if not super().is_valid:
+            return False
+        return self.length == 16
+
 
 # The max size should be less than the actual PNG-spec max size. When deciding
-# how much data to put into a DataChunk, we decide **before** compression. If
-# the data is not compressible, we could end up with more bytes than we
-# started with.
+# how much data to put into a DataChunk, we decide **before** doign any
+# compression or encryption. We could very easily end up with more bytes than
+# we started with.
 #
 # The good news is the max size in the PNG spec is "like" 4 GiB (based on the
 # chunk length field in chunk headers being a 32-bit uint)
 MAX_DATA_CHUNK_BYTES = 100 * 1024 * 1024  # 100 MiB
 PNG_SIG = b'\x89PNG\r\n\x1a\n'
-IHDR = Chunk('IHDR', struct.pack('>IIBBBBB', 1, 1, 1, 0, 0, 0, 0))
-IDAT = Chunk('IDAT', zlib.compress(struct.pack('>BB', 0, 0)))
-IEND = Chunk('IEND', b'')

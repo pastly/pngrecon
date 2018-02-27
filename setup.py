@@ -52,5 +52,6 @@ setup(
         ]
     },
     install_requires=[
+        'cryptography',
     ],
 )

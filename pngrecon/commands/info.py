@@ -18,13 +18,6 @@ def main(args):
             chunk_type = ChunkType(c.type)
         except ValueError:
             chunk_type = None
-        if chunk_type is not None:
-            if chunk_type == ChunkType.Index:
-                chunk_type = 'IndexChunk'
-            elif chunk_type == ChunkType.Data:
-                chunk_type = 'DataChunk'
-            else:
-                chunk_type = 'Chunk {} (pngrecon???)'.format(c.type)
-        else:
+        if chunk_type is None:
             chunk_type = 'Chunk {}'.format(c.type)
         log(chunk_type, 'with len', c.length)

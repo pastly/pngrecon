@@ -1,6 +1,11 @@
 from ..lib.chunk import read_image_stream
-from ..lib.chunk import decode_chunks_to_bytes
+from ..lib.chunk import (ChunkType, EncryptionType, CompressMethod)
+from ..lib.chunk import (IndexChunk, DataChunk, CryptInfoChunk)
+from ..util.log import fail_hard
+from ..util.crypto import gen_key
+from ..util.crypto import decrypt
 from argparse import ArgumentDefaultsHelpFormatter
+import zlib
 
 
 def gen_parser(sub_p):
@@ -12,9 +17,129 @@ def gen_parser(sub_p):
                    help='Where to write data')
 
 
+def keep_and_parse_our_chunks(chunks):
+    ''' Given a list of chunks, discard ones that aren't ours and parse
+    them from Chunk instances into the more specific types of chunks they
+    are '''
+    keep_chunks = []
+    for chunk in chunks:
+        # TODO: Determining if a chunk is one we care about by using exceptions
+        # is ugly. It may even be uncomfortably slow. Replace with something
+        # better. One idea: an lre_cache'ed function that catches exceptions
+        try:
+            ChunkType(chunk.type)
+        except ValueError:
+            continue
+        chunk_type = ChunkType(chunk.type)
+        if chunk_type == ChunkType.Index:
+            keep_chunks.append(IndexChunk.from_chunk(chunk))
+        elif chunk_type == ChunkType.Data:
+            keep_chunks.append(DataChunk.from_chunk(chunk))
+        elif chunk_type == ChunkType.CryptInfo:
+            keep_chunks.append(CryptInfoChunk.from_chunk(chunk))
+        else:
+            fail_hard('Unknown chunk type', chunk_type)
+    return keep_chunks
+
+
+def validate_chunk_set(chunks):
+    ''' Given a list of chunks that are all subclasses of Chunk, make sure
+    they seem to form a valid set of chunks. For example, the number of data
+    chunks is correct, and if encryption is done, there's one encryption info
+    chunk. '''
+    index_chunks = [c for c in chunks if isinstance(c, IndexChunk)]
+    if len(index_chunks) < 1:
+        return False, 'There is no index chunk'
+    if len(index_chunks) > 1:
+        return False, 'There is more than one index chunk'
+    index_chunk = index_chunks[0]
+    expected_num_data_chunks = index_chunk.num_data_chunks
+    data_chunks = [c for c in chunks if isinstance(c, DataChunk)]
+    if len(data_chunks) != expected_num_data_chunks:
+        return False, 'Expected {} data chunks but there are {}'.format(
+            expected_num_data_chunks, len(data_chunks))
+    if index_chunk.encryption_type != EncryptionType.No:
+        crypt_info_chunks = [c for c in chunks
+                             if isinstance(c, CryptInfoChunk)]
+        if len(crypt_info_chunks) != 1:
+            return False, 'Data is encrypted. Expected 1 crypt info chunk '\
+                'but got {}'.format(len(crypt_info_chunks))
+    for i, chunk in enumerate(chunks):
+        if not chunk.is_valid:
+            return False, 'Invalid {} at index {}'.format(type(chunk), i)
+    return True, ''
+
+
+def get_index_chunk_from_chunks(chunks):
+    ''' Given a validated list of chunks, find the index chunk and return it
+    '''
+    valid, error_msg = validate_chunk_set(chunks)
+    assert valid
+    index_chunks = [c for c in chunks if isinstance(c, IndexChunk)]
+    assert len(index_chunks) == 1
+    return index_chunks[0]
+
+
+def get_crypt_info_chunk_from_chunks(chunks):
+    ''' Given a validated list of chunks, find the crypt info chunk and return
+    it '''
+    valid, error_msg = validate_chunk_set(chunks)
+    assert valid
+    crypt_info_chunks = [c for c in chunks if isinstance(c, CryptInfoChunk)]
+    assert len(crypt_info_chunks) == 1
+    return crypt_info_chunks[0]
+
+
+def decrypt_bites(chunks):
+    ''' Given a validated list of chunks, decrypt the data in the data chunks
+    and return a list of the resulting data '''
+    valid, error_msg = validate_chunk_set(chunks)
+    assert valid
+    index_chunk = get_index_chunk_from_chunks(chunks)
+    data_chunks = [c for c in chunks if isinstance(c, DataChunk)]
+    t = index_chunk.encryption_type
+    if t == EncryptionType.No:
+        return [c.data for c in data_chunks]
+    elif t == EncryptionType.SaltedPass01:
+        crypt_info_chunk = get_crypt_info_chunk_from_chunks(chunks)
+        salt = crypt_info_chunk.salt
+        salt, fernet = gen_key(salt=salt)
+        return [decrypt(fernet, c.data) for c in data_chunks]
+    else:
+        fail_hard('Unimplemented decryption type', t)
+
+
+def decompress_bites(index_chunk, bites):
+    ''' Given a valid index chunk and some bites (data from data chunks),
+    decompress the bites if necessary. Return a list of the resulting data '''
+    assert index_chunk.is_valid
+    m = index_chunk.compress_method
+    if m == CompressMethod.No:
+        return bites
+    elif m == CompressMethod.Zlib:
+        return [zlib.decompress(b) for b in bites]
+    else:
+        fail_hard('Unimplemented compress method', m)
+
+
+def completely_decode_chunks(chunks):
+    ''' Given a validated list of chunks, decyrpt/decompress as needed and
+    return the bytes stored within '''
+    valid, error_msg = validate_chunk_set(chunks)
+    assert valid
+    index_chunk = get_index_chunk_from_chunks(chunks)
+    bites = decrypt_bites(chunks)
+    bites = decompress_bites(index_chunk, bites)
+    return b''.join(bites)
+
+
 def main(args):
     with open(args.input, 'rb') as fd:
         chunks = read_image_stream(fd)
-    b = decode_chunks_to_bytes(chunks)
+    chunks = keep_and_parse_our_chunks(chunks)
+    valid, error_msg = validate_chunk_set(chunks)
+    if not valid:
+        fail_hard(error_msg)
+    data = completely_decode_chunks(chunks)
     with open(args.output, 'wb') as fd:
-        fd.write(b)
+        fd.write(data)
