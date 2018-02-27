@@ -236,7 +236,6 @@ class DataChunk(Chunk):
 # The good news is the max size in the PNG spec is "like" 4 GiB (based on the
 # chunk length field in chunk headers being a 32-bit uint)
 MAX_DATA_CHUNK_BYTES = 100 * 1024 * 1024  # 100 MiB
-CUSTOM_TYPE = 'maTt'
 PNG_SIG = b'\x89PNG\r\n\x1a\n'
 IHDR = Chunk('IHDR', struct.pack('>IIBBBBB', 1, 1, 1, 0, 0, 0, 0))
 IDAT = Chunk('IDAT', zlib.compress(struct.pack('>BB', 0, 0)))
