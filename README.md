@@ -6,7 +6,9 @@ Optionally compress data.
 
 Optionally encrypt data with a symmetric key derived from a salted password.
 
-FIXME: encryption password is always 'password'
+- FIXME: encryption password is always 'password'
+- FIXME: warnings about using compression in adversarial situations (notes in
+  later section)
 
 # Install
 
@@ -69,3 +71,26 @@ Encode all files in the current working directory with the help of `tar`.
     (venv) user@host$ pngrecon decode -i hidden-backup.tar.png | tar t
     [ ... list of files ... ]
 
+
+# Ideas
+
+- Add padding chunks.
+
+  When in the image, they should look exactly like a data chunk. So the data
+  chunk type needs to be more complex.
+
+  Actually ... this seems quite hard. How big should the be? How many? Where
+  in the file?
+
+# Notes
+
+Unstructured info I need to organize and put somewhere
+
+Regarding why compression could be dangerous:
+
+> With the ability to control *part* of the plaintext, ability to cause the
+> encryption to happen over and over again with different plaintext snippets,
+> and ability to see changes in the resulting compression ratio... yes, they
+> could learn the contents. Like let's say you had a secret "abcdefgh" in the
+> plaintext, and the attacker could control 4 bytes nearby; they'd see that
+> using "abcd" caused smaller output than "abJd".
