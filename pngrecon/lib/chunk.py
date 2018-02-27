@@ -92,6 +92,12 @@ class Chunk():
         return self._data
 
 
+# Chunk names should be <lower><lower><upper><lower>
+# https://www.w3.org/TR/PNG/#table52
+# lower 1st: not critical for display
+# lower 2nd: private/non-standard
+# upper 3rd: reservered and must be upper
+# lower 4th: safe to copy (acutally it may be unsafe!)
 class ChunkType(Enum):
     Index = 'deQm'
     Data = 'maTt'
