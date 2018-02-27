@@ -21,7 +21,7 @@ def gen_key(password=None, salt=None):
         algorithm=hashes.SHA256(),
         length=32,
         salt=salt,
-        iterations=500000,
+        iterations=100000,
         backend=default_backend()
     )
     # Fernet wants it in base 64
