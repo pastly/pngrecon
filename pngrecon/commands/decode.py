@@ -16,6 +16,10 @@ def gen_parser(sub_p):
                    help='Where to read data')
     p.add_argument('-o', '--output', type=str, default='/dev/stdout',
                    help='Where to write data')
+    p.add_argument(
+        '--password-file', type=str, default=None,
+        help='If the data was encrypted, read decryption password  '
+        'from this file.')
 
 
 def keep_and_parse_our_chunks(chunks):
@@ -91,7 +95,7 @@ def get_crypt_info_chunk_from_chunks(chunks):
     return crypt_info_chunks[0]
 
 
-def decrypt_data(chunks):
+def decrypt_data(chunks, pw):
     ''' Given a validated list of chunks, decrypt the data in the data chunks
     and return a list of the resulting data '''
     valid, error_msg = validate_chunk_set(chunks)
@@ -105,7 +109,7 @@ def decrypt_data(chunks):
     elif t == EncryptionType.SaltedPass01:
         crypt_info_chunk = get_crypt_info_chunk_from_chunks(chunks)
         salt = crypt_info_chunk.salt
-        salt, fernet = gen_key(salt=salt)
+        salt, fernet = gen_key(password=pw, salt=salt)
         return decrypt(fernet, data)
     else:
         fail_hard('Unimplemented decryption type', t)
@@ -125,15 +129,31 @@ def decompress_data(index_chunk, data):
         fail_hard('Unimplemented compress method', m)
 
 
-def completely_decode_chunks(chunks):
+def completely_decode_chunks(chunks, pw):
     ''' Given a validated list of chunks, decyrpt/decompress as needed and
     return the bytes stored within '''
     valid, error_msg = validate_chunk_set(chunks)
     assert valid
     index_chunk = get_index_chunk_from_chunks(chunks)
-    data = decrypt_data(chunks)
+    data = decrypt_data(chunks, pw)
     data = decompress_data(index_chunk, data)
     return data
+
+
+def data_is_encrypted(chunks):
+    valid, error_msg = validate_chunk_set(chunks)
+    assert valid
+    index_chunk = get_index_chunk_from_chunks(chunks)
+    return index_chunk.encryption_type != EncryptionType.No
+
+
+def get_password(args):
+    if args.password_file is None:
+        fail_hard('Data is encrypted but not --password-file given')
+    elif os.path.isdir(args.password_file):
+        fail_hard(args.password_file, 'must be a file')
+    with open(args.password_file, 'rb') as fd:
+        return fd.read()
 
 
 def main(args):
@@ -147,6 +167,10 @@ def main(args):
     valid, error_msg = validate_chunk_set(chunks)
     if not valid:
         fail_hard(error_msg)
-    data = completely_decode_chunks(chunks)
+    if data_is_encrypted(chunks):
+        pw = get_password(args)
+    else:
+        pw = None
+    data = completely_decode_chunks(chunks, pw)
     with open(args.output, 'wb') as fd:
         fd.write(data)

@@ -53,6 +53,12 @@ def encrypt_bytes(b, fernet):
     return encrypt(fernet, b)
 
 
+def get_password(args):
+    assert not os.path.isdir(args.password_file)
+    with open(args.password_file, 'rb') as fd:
+        return fd.read()
+
+
 def completely_encode_stream(stream, args, compress_method):
     ''' The input stream should contain bytes that the user wishes to encode
     into a PNG. If seekable, seek to the start. Otherwise assume we are at the
@@ -63,7 +69,8 @@ def completely_encode_stream(stream, args, compress_method):
     if stream.seekable():
         stream.seek(0, 0)
     if args.encrypt:
-        salt, fernet = gen_key()
+        pw = get_password(args)
+        salt, fernet = gen_key(password=pw)
         encryption_type = EncryptionType.SaltedPass01
     else:
         salt, fernet = None, None
@@ -118,6 +125,10 @@ def gen_parser(sub_p):
     p.add_argument(
         '-e', '--encrypt', action='store_true', help='If specified, encrypt '
         'data before encoding')
+    p.add_argument(
+        '--password-file', type=str, default=None,
+        help='If encrypting, read password to use for symmetric encryption '
+        'from this file.')
 
 
 def main(args):
@@ -139,6 +150,13 @@ def main(args):
         source_chunks = get_provided_source_image_chunks(args)
     else:
         source_chunks = get_basic_source_image_chunks()
+    if args.encrypt:
+        if not args.password_file:
+            fail_hard('--password-file must be specified for encryption')
+        elif os.path.isdir(args.password_file):
+            fail_hard(args.password_file, 'must be a file')
+    elif args.password_file:
+        fail_hard('Don\'t specify --password-file when not doing encryption')
     with open(args.input, 'rb') as fd:
         chunks = completely_encode_stream(fd, args, compress_method)
     encode_source_and_data_chunks_together(args, source_chunks, chunks)

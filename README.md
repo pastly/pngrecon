@@ -6,7 +6,6 @@ Optionally compress data.
 
 Optionally encrypt data with a symmetric key derived from a salted password.
 
-- FIXME: encryption password is always 'password'
 - FIXME: warnings about using compression in adversarial situations (notes in
   later section)
 - FIXME: are my chunks actually safe-to-copy? 4th bit in chunk names

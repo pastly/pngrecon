@@ -1,3 +1,4 @@
+from ..util.log import fail_hard
 from cryptography.fernet import Fernet
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -11,7 +12,7 @@ def gen_salt():
 
 
 def prompt_password():
-    return b'password'
+    fail_hard('prompt_password not implemented')
 
 
 def gen_key(password=None, salt=None):
