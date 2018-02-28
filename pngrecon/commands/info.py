@@ -1,7 +1,9 @@
 from ..lib.chunk import read_image_stream
 from ..lib.chunk import ChunkType
 from ..util.log import log
+from ..util.log import fail_hard
 from argparse import ArgumentDefaultsHelpFormatter
+import os
 
 
 def gen_parser(sub_p):
@@ -10,6 +12,10 @@ def gen_parser(sub_p):
 
 
 def main(args):
+    if not os.path.exists(args.image):
+        fail_hard(args.image, 'must exist')
+    if os.path.isdir(args.image):
+        fail_hard('Image can\'t be a directory')
     with open(args.image, 'rb') as fd:
         chunks = read_image_stream(fd)
     log(args.image, 'contains', len(chunks), 'chunks')

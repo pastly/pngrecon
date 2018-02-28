@@ -6,6 +6,7 @@ from ..util.crypto import gen_key
 from ..util.crypto import decrypt
 from argparse import ArgumentDefaultsHelpFormatter
 import zlib
+import os
 
 
 def gen_parser(sub_p):
@@ -134,6 +135,10 @@ def completely_decode_chunks(chunks):
 
 
 def main(args):
+    if not os.path.exists(args.input):
+        fail_hard(args.input, 'must exist')
+    if os.path.isdir(args.input):
+        fail_hard('Input can\'t be a directory')
     with open(args.input, 'rb') as fd:
         chunks = read_image_stream(fd)
     chunks = keep_and_parse_our_chunks(chunks)
