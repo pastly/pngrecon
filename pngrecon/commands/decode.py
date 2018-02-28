@@ -91,34 +91,36 @@ def get_crypt_info_chunk_from_chunks(chunks):
     return crypt_info_chunks[0]
 
 
-def decrypt_bites(chunks):
+def decrypt_data(chunks):
     ''' Given a validated list of chunks, decrypt the data in the data chunks
     and return a list of the resulting data '''
     valid, error_msg = validate_chunk_set(chunks)
     assert valid
     index_chunk = get_index_chunk_from_chunks(chunks)
     data_chunks = [c for c in chunks if isinstance(c, DataChunk)]
+    data = b''.join([c.data for c in data_chunks])
     t = index_chunk.encryption_type
     if t == EncryptionType.No:
-        return [c.data for c in data_chunks]
+        return data
     elif t == EncryptionType.SaltedPass01:
         crypt_info_chunk = get_crypt_info_chunk_from_chunks(chunks)
         salt = crypt_info_chunk.salt
         salt, fernet = gen_key(salt=salt)
-        return [decrypt(fernet, c.data) for c in data_chunks]
+        return decrypt(fernet, data)
     else:
         fail_hard('Unimplemented decryption type', t)
 
 
-def decompress_bites(index_chunk, bites):
-    ''' Given a valid index chunk and some bites (data from data chunks),
+def decompress_data(index_chunk, data):
+    ''' Given a valid index chunk and data from data chunks,
     decompress the bites if necessary. Return a list of the resulting data '''
+    assert isinstance(data, bytes)
     assert index_chunk.is_valid
     m = index_chunk.compress_method
     if m == CompressMethod.No:
-        return bites
+        return data
     elif m == CompressMethod.Zlib:
-        return [zlib.decompress(b) for b in bites]
+        return zlib.decompress(data)
     else:
         fail_hard('Unimplemented compress method', m)
 
@@ -129,9 +131,9 @@ def completely_decode_chunks(chunks):
     valid, error_msg = validate_chunk_set(chunks)
     assert valid
     index_chunk = get_index_chunk_from_chunks(chunks)
-    bites = decrypt_bites(chunks)
-    bites = decompress_bites(index_chunk, bites)
-    return b''.join(bites)
+    data = decrypt_data(chunks)
+    data = decompress_data(index_chunk, data)
+    return data
 
 
 def main(args):

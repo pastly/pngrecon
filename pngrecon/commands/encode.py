@@ -24,23 +24,36 @@ def encode_source_and_data_chunks_together(args, source_chunks, data_chunks):
         fd.write(source_chunks[-1].raw_data)
 
 
-def break_stream_into_bites(stream, compress_method, fernet=None):
+def break_into_bites(b, max_bite_len):
+    assert isinstance(b, bytes)
     bites = []
-    while len(stream.peek(1)) > 0:
-        b = stream.read(MAX_DATA_CHUNK_BYTES)
-        if compress_method == CompressMethod.No:
-            pass
-        elif compress_method == CompressMethod.Zlib:
-            b = zlib.compress(b)
-        else:
-            fail_hard('Unknown compress method', compress_method)
-        if fernet is not None:
-            b = encrypt(fernet, b)
+    while len(b) > max_bite_len:
+        bites.append(b[0:max_bite_len])
+        b = b[max_bite_len:]
+    if len(b) > 0:
         bites.append(b)
     return bites
 
 
-def encode_stream_as_chunks(stream, args, compress_method):
+def compress_stream(stream, compress_method):
+    assert isinstance(compress_method, CompressMethod)
+    b = b''
+    while len(stream.peek(1)) > 0:
+        b += stream.read()
+    if compress_method == CompressMethod.No:
+        return b
+    elif compress_method == CompressMethod.Zlib:
+        return zlib.compress(b)
+
+
+def encrypt_bytes(b, fernet):
+    assert isinstance(b, bytes)
+    if not fernet:
+        return b
+    return encrypt(fernet, b)
+
+
+def completely_encode_stream(stream, args, compress_method):
     ''' The input stream should contain bytes that the user wishes to encode
     into a PNG. If seekable, seek to the start. Otherwise assume we are at the
     start of the data the user wishes to encode.
@@ -55,7 +68,8 @@ def encode_stream_as_chunks(stream, args, compress_method):
     else:
         salt, fernet = None, None
         encryption_type = EncryptionType.No
-    bites = break_stream_into_bites(stream, compress_method, fernet)
+    b = encrypt_bytes(compress_stream(stream, compress_method), fernet)
+    bites = break_into_bites(b, MAX_DATA_CHUNK_BYTES)
     index_chunk = [IndexChunk(
         EncodingType.SingleFile, encryption_type, compress_method, len(bites))]
     crypt_info_chunk = [CryptInfoChunk(salt)] if args.encrypt else []
@@ -126,5 +140,5 @@ def main(args):
     else:
         source_chunks = get_basic_source_image_chunks()
     with open(args.input, 'rb') as fd:
-        chunks = encode_stream_as_chunks(fd, args, compress_method)
+        chunks = completely_encode_stream(fd, args, compress_method)
     encode_source_and_data_chunks_together(args, source_chunks, chunks)
