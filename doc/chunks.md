@@ -1,5 +1,7 @@
 All values are stored in big-endian mode.
 
+Nothing can be assumed about the order of these chunks in a PNG.
+
 # Index Chunk
 
     deQm
@@ -89,10 +91,35 @@ Appears between zero and 2^32-1 times in a PNG containing pngrecon encoded data.
 
 During encoding, data is optionally compressed and optionally encrypted (in
 that order). After that, it is broken up into a series of "bites", and each
-"bite" is stored in a data chunk. A "bite" has a maximum size of 100 MiB,
-chosen rather arbitrarily, and which is significantly smaller than the size
-limit of a chunk the PNG standard allows for.
+"bite" is stored in a data chunk. A "bite" has a maximum size of 100 MiB in
+this implementation, chosen rather arbitrarily, and which is significantly
+smaller than the size limit of a chunk the PNG standard allows for (4 GiB,
+limited by the max value of a uint32).
 
-During decoding, all the "bites" stored in data chunks are concatenated
-together. If data was encrypted, it is decrypted. If data was compressed, it is
-then decompressed. Finally, the final output is given to the user.
+Encoders MAY choose almost any max size for a "bite" between 1 and *almost* 4
+GiB. In fact, encoders MAY randomly size each "bite" within those limits.
+
+Decoders MAY assume that if a data chunk exists, it will contain a "bite" with
+positive size.  Decoders MUST NOT assume anything else such as number, size, or
+order of data chunks.
+
+## Fields
+
+In this order, a data chunk contains the following fields.
+
+### Index
+
+`uint32`
+
+**Any** `uint32`. The data chunks' indexes determine how they should be ordered
+when decoding. Lower indexes come first. Data chunks MAY be stored in the PNG
+in any order. Only the sorted order of indexes is important. For example, it is
+**not an error** to store three data chunks with the indexes 43, 943, 88 as
+long as the are meant to be reassembled in order (43, 88, 943) during decoding.
+
+#### Data
+
+`bytes`
+
+One or more bytes storing the (possibly encrypted, and possibly compressed)
+actual payload data from the user. These are the "bites" described previously.

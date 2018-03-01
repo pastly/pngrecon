@@ -9,6 +9,7 @@ from argparse import ArgumentDefaultsHelpFormatter
 import os
 import struct
 import zlib
+import random
 
 
 def encode_source_and_data_chunks_together(args, source_chunks, data_chunks):
@@ -80,8 +81,15 @@ def completely_encode_stream(stream, args, compress_method):
     index_chunk = [IndexChunk(
         EncodingType.SingleFile, encryption_type, compress_method, len(bites))]
     crypt_info_chunk = [CryptInfoChunk(salt)] if args.encrypt else []
-    data_chunks = [DataChunk(bite) for bite in bites]
-    return index_chunk + crypt_info_chunk + data_chunks
+    data_chunks = [DataChunk(i, bite) for i, bite in enumerate(bites)]
+    all_chunks = index_chunk + crypt_info_chunk + data_chunks
+    # This random shuffle is soley for defensive programming against lazy
+    # programmers. When an image is edited, the PNG standard allows for chunks
+    # to be reordered (to some extent; not completely randomly). Therefore,
+    # pngrecon decoders should NOT be expecting our chunks to be in a specific
+    # order.
+    random.shuffle(all_chunks)
+    return all_chunks
 
 
 def get_provided_source_image_chunks(args):

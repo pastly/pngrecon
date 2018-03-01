@@ -6,7 +6,6 @@ Optionally compress data.
 
 Optionally encrypt data with a symmetric key derived from a salted password.
 
-- FIXME: are my chunks actually safe-to-copy? 4th bit in chunk names
 - FIXME: add version info to index?
 
 # Install

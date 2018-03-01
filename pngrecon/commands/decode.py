@@ -63,6 +63,10 @@ def validate_chunk_set(chunks):
     if len(data_chunks) != expected_num_data_chunks:
         return False, 'Expected {} data chunks but there are {}'.format(
             expected_num_data_chunks, len(data_chunks))
+    data_chunk_indexes = [c.index for c in data_chunks]
+    if len(data_chunk_indexes) != len(set(data_chunk_indexes)):
+        return False, 'The data chunk indexes are not unique and they can\'t '\
+            'be ordered'
     if index_chunk.encryption_type != EncryptionType.No:
         crypt_info_chunks = [c for c in chunks
                              if isinstance(c, CryptInfoChunk)]
@@ -102,6 +106,7 @@ def decrypt_data(chunks, pw):
     assert valid
     index_chunk = get_index_chunk_from_chunks(chunks)
     data_chunks = [c for c in chunks if isinstance(c, DataChunk)]
+    data_chunks = sorted(data_chunks, key=lambda c: c.index)
     data = b''.join([c.data for c in data_chunks])
     t = index_chunk.encryption_type
     if t == EncryptionType.No:

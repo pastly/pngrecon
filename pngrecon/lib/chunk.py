@@ -66,7 +66,7 @@ class Chunk():
         return str(t, 'utf-8')
 
     @property
-    def data(self):
+    def chunk_payload(self):
         ''' payload data in this chunk '''
         return self._data[8:8+self.length]
 
@@ -83,13 +83,13 @@ class Chunk():
         ''' calculates the crc and checks that it matches the crc that we were
         given '''
         crc1 = self.crc
-        crc2 = zlib.crc32(bytes(self.type, 'utf-8') + self.data)
+        crc2 = zlib.crc32(bytes(self.type, 'utf-8') + self.chunk_payload)
         return crc1 == crc2
 
     @property
     def raw_data(self):
-        ''' the length, type, data, and crc all smooshed together like it would
-        appear in a PNG file'''
+        ''' the length, type, chunk_payload, and crc all smooshed together like
+        it would appear in a PNG file'''
         if not self.is_valid:
             log('Returning raw_bytes for Chunk that is not valid')
         return self._data
@@ -100,7 +100,7 @@ class Chunk():
 # lower 1st: not critical for display
 # lower 2nd: private/non-standard
 # upper 3rd: reservered and must be upper
-# lower 4th: safe to copy (acutally it may be unsafe!)
+# lower 4th: safe to copy
 class ChunkType(Enum):
     Index = 'deQm'
     Data = 'maTt'
@@ -138,7 +138,7 @@ class IndexChunk(Chunk):
     def from_chunk(cls, chunk):
         assert isinstance(chunk, Chunk)
         encoding_type, encryption_type, compress_method, num_data_chunks = \
-            struct.unpack('>IIII', chunk.data)
+            struct.unpack('>IIII', chunk.chunk_payload)
         encoding_type = EncodingType(encoding_type)
         encryption_type = EncryptionType(encryption_type)
         compress_method = CompressMethod(compress_method)
@@ -162,42 +162,60 @@ class IndexChunk(Chunk):
 
     @property
     def encoding_type(self):
-        t, = struct.unpack_from('>I', self.data, 0)
+        t, = struct.unpack_from('>I', self.chunk_payload, 0)
         # throws ValueError if not valid
         return EncodingType(t)
 
     @property
     def encryption_type(self):
-        t, = struct.unpack_from('>I', self.data, 4)
+        t, = struct.unpack_from('>I', self.chunk_payload, 4)
         # throws ValueError if not valid
         return EncryptionType(t)
 
     @property
     def compress_method(self):
-        m, = struct.unpack_from('>I', self.data, 8)
+        m, = struct.unpack_from('>I', self.chunk_payload, 8)
         # throws ValueError if not valid
         return CompressMethod(m)
 
     @property
     def num_data_chunks(self):
-        n, = struct.unpack_from('>I', self.data, 12)
+        n, = struct.unpack_from('>I', self.chunk_payload, 12)
         return n
 
 
 class DataChunk(Chunk):
-    def __init__(self, data):
+    def __init__(self, index, data):
+        assert isinstance(index, int)
+        assert index >= 0
+        assert isinstance(data, bytes)
         chunk_type = ChunkType.Data
-        super().__init__(chunk_type.value, data)
+        data_len = len(data)
+        d = struct.pack('>I{}s'.format(data_len), index, data)
+        super().__init__(chunk_type.value, d)
 
     @classmethod
     def from_chunk(cls, chunk):
         assert isinstance(chunk, Chunk)
-        c = DataChunk(chunk.data)
+        index, = struct.unpack_from('>I', chunk.chunk_payload, 0)
+        data = chunk.chunk_payload[4:]
+        c = DataChunk(index, data)
         return c
 
     @property
+    def index(self):
+        i, = struct.unpack_from('>I', self.chunk_payload, 0)
+        return i
+
+    @property
+    def data(self):
+        return self.chunk_payload[4:]
+
+    @property
     def is_valid(self):
-        return super().is_valid
+        if not super().is_valid:
+            return False
+        return len(self.data) > 0
 
 
 class CryptInfoChunk(Chunk):
@@ -211,13 +229,13 @@ class CryptInfoChunk(Chunk):
     @classmethod
     def from_chunk(cls, chunk):
         assert isinstance(chunk, Chunk)
-        s, = struct.unpack('>16s', chunk.data)
+        s, = struct.unpack('>16s', chunk.chunk_payload)
         c = CryptInfoChunk(s)
         return c
 
     @property
     def salt(self):
-        s, = struct.unpack_from('>16s', self.data, 0)
+        s, = struct.unpack_from('>16s', self.chunk_payload, 0)
         return s
 
     @property
