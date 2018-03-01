@@ -47,8 +47,10 @@ Pass `-c gzip` to `pngrecon encode` to compress encoded data with zlib.
     /dev/stdin contains 5 chunks
     Chunk IHDR with len 13
     Chunk IDAT with len 10
-    IndexChunk with len 12
-    DataChunk with len 615
+    ChunkType.Index with len 12
+    ChunkType.Data with len 615
+    Chunk IEND with len 0
+
     Chunk IEND with len 0
 
 Use `-i` and `-o` to change input/outout for `encode` and `decode` commands.
