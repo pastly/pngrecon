@@ -6,8 +6,6 @@ Optionally compress data.
 
 Optionally encrypt data with a symmetric key derived from a salted password.
 
-- FIXME: warnings about using compression in adversarial situations (notes in
-  later section)
 - FIXME: are my chunks actually safe-to-copy? 4th bit in chunk names
 - FIXME: add version info to index?
 
@@ -85,15 +83,17 @@ Encode all files in the current working directory with the help of `tar`.
   Actually ... this seems quite hard. How big should the be? How many? Where
   in the file?
 
-# Notes
+# Warnings
 
-Unstructured info I need to organize and put somewhere
+Instead of relying on pngrecon to use standard cryptography libraries
+correctly, it might be better to use well-established and trusted encryption
+tools before piping data into pngrecon. We think we are using these libraries
+correctly, but if you need to rely on encryption, we think it is probably
+smarter to use something written by cryptographers.
 
-Regarding why compression could be dangerous:
-
-> With the ability to control *part* of the plaintext, ability to cause the
-> encryption to happen over and over again with different plaintext snippets,
-> and ability to see changes in the resulting compression ratio... yes, they
-> could learn the contents. Like let's say you had a secret "abcdefgh" in the
-> plaintext, and the attacker could control 4 bytes nearby; they'd see that
-> using "abcd" caused smaller output than "abJd".
+We sought advice regarding compressing *and* encrypting data. The consensus
+seemed to be that compressing data and then encrypting the result is smarter
+than the opposite. That said, in certain situations, if your adversary can
+control part of the plaintext you are encrypting and can cause the
+encryption+compression to happen over and over again, they can learn the
+contents.
