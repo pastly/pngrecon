@@ -87,6 +87,8 @@ def completely_encode_stream(stream, args, compress_method):
 def get_provided_source_image_chunks(args):
     with open(args.source, 'rb') as fd:
         source_chunks = read_image_stream(fd)
+    if source_chunks is None:
+        fail_hard(args.source, 'does not appear to be a PNG')
     if len(source_chunks) < 2:
         fail_hard('Don\'t know how to handle image with only',
                   len(source_chunks), 'chunks in it. They\'re', source_chunks)

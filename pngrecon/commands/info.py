@@ -18,6 +18,8 @@ def main(args):
         fail_hard('Image can\'t be a directory')
     with open(args.image, 'rb') as fd:
         chunks = read_image_stream(fd)
+    if chunks is None:
+        fail_hard(args.image, 'does not appear to be a PNG')
     log(args.image, 'contains', len(chunks), 'chunks')
     for c in chunks:
         try:

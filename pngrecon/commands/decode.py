@@ -163,6 +163,8 @@ def main(args):
         fail_hard('Input can\'t be a directory')
     with open(args.input, 'rb') as fd:
         chunks = read_image_stream(fd)
+    if chunks is None:
+        fail_hard(args.input, 'does not appear to be a PNG')
     chunks = keep_and_parse_our_chunks(chunks)
     valid, error_msg = validate_chunk_set(chunks)
     if not valid:

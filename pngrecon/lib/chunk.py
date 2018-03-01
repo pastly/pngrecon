@@ -8,11 +8,14 @@ from enum import Enum
 def read_image_stream(stream):
     ''' Read a PNG from the given stream and return an ordered list of its
     chunks. If the stream is seekable, seek to the start of the stream.
-    Otherwise assumes we're at the start of a PNG '''
+    Otherwise assumes we're at the start of a PNG. If the stream does not look
+    like it is most likely a PNG, return None. '''
     chunks = []
     if stream.seekable():
         stream.seek(0, 0)
-    stream.read(len(PNG_SIG))
+    if stream.read(len(PNG_SIG)) != PNG_SIG:
+            log('Could not find PNG file signature')
+            return None
     while len(stream.peek(1)) > 0:
         c = Chunk.from_byte_stream(stream)
         chunks.append(c)
