@@ -227,12 +227,9 @@ class CryptInfoChunk(Chunk):
         return self.length == 16
 
 
-# The max size should be less than the actual PNG-spec max size. When deciding
-# how much data to put into a DataChunk, we decide **before** doign any
-# compression or encryption. We could very easily end up with more bytes than
-# we started with.
-#
-# The good news is the max size in the PNG spec is "like" 4 GiB (based on the
-# chunk length field in chunk headers being a 32-bit uint)
+# The max size in the PNG spec is "like" 4 GiB (based on the chunk length field
+# in chunk headers being a 32-bit uint) but we don't really need to try to hit
+# that. Besides, having smaller chunks means we can solve fun serialization
+# problems!
 MAX_DATA_CHUNK_BYTES = 100 * 1024 * 1024  # 100 MiB
 PNG_SIG = b'\x89PNG\r\n\x1a\n'
