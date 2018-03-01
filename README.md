@@ -49,7 +49,15 @@ Pass `-c gzip` to `pngrecon encode` to compress encoded data with zlib.
     ChunkType.Data with len 615
     Chunk IEND with len 0
 
-    Chunk IEND with len 0
+With `pngrecon encode`, give `-e` to encrypt the data using a symmetric key
+derived from the contents of `--password-file`. **Note**: the *entire* contents
+of the `--password-file` will be used, *including any trailing new line
+characters*.
+
+    (venv) user@host$ echo -n "SuperSecurePassword" > pw.txt
+    (venv) user@host$ <file.txt pngrecon encode -e --password-file pw.txt | pngrecon decode --password-file pw.txt
+    [ ... contents of file.txt ... ]
+
 
 Use `-i` and `-o` to change input/outout for `encode` and `decode` commands.
 
