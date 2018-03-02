@@ -9,6 +9,7 @@ from argparse import ArgumentDefaultsHelpFormatter
 import os
 import struct
 import zlib
+import lzma
 import random
 
 
@@ -45,6 +46,10 @@ def compress_stream(stream, compress_method):
         return b
     elif compress_method == CompressMethod.Zlib:
         return zlib.compress(b)
+    elif compress_method == CompressMethod.Lzma:
+        return lzma.compress(b)
+    else:
+        fail_hard('Unimplemented compress_method', compress_method)
 
 
 def encrypt_bytes(b, fernet):
@@ -129,9 +134,9 @@ def gen_parser(sub_p):
         'default base PNG')
     p.add_argument(
         '-c', '--compress', type=str, default='no', nargs='?',
-        choices=['no', 'gzip'], help='Compress data before encoding. If not '
-        'specified, do not compress. If specified with no argument, compress '
-        'with gzip. Otherwise, compress according to the argument.')
+        choices=['no', 'gzip', 'xz'], help='Compress data before encoding. If '
+        'not specified, do not compress. If specified with no argument, '
+        'compress with gzip. Otherwise, compress according to the argument.')
     p.add_argument(
         '-e', '--encrypt', action='store_true', help='If specified, encrypt '
         'data before encoding')
@@ -148,18 +153,23 @@ def main(args):
         fail_hard(args.input, 'must exist')
     if os.path.isdir(args.input):
         fail_hard('Input can\'t be a directory')
+
     if args.compress == 'no':
         compress_method = CompressMethod.No
     elif args.compress == 'gzip':
         compress_method = CompressMethod.Zlib
+    elif args.compress == 'xz':
+        compress_method = CompressMethod.Lzma
     elif args.compress is None:
         compress_method = CompressMethod.Zlib
     else:
         fail_hard('Unknown --compress value', args.compress)
+
     if args.source:
         source_chunks = get_provided_source_image_chunks(args)
     else:
         source_chunks = get_basic_source_image_chunks()
+
     if args.encrypt:
         if not args.password_file:
             fail_hard('--password-file must be specified for encryption')
@@ -167,6 +177,7 @@ def main(args):
             fail_hard(args.password_file, 'must be a file')
     elif args.password_file:
         fail_hard('Don\'t specify --password-file when not doing encryption')
+
     with open(args.input, 'rb') as fd:
         chunks = completely_encode_stream(fd, args, compress_method)
     encode_source_and_data_chunks_together(args, source_chunks, chunks)

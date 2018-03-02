@@ -119,6 +119,7 @@ class EncryptionType(Enum):
 class CompressMethod(Enum):
     No = 1
     Zlib = 2
+    Lzma = 3
 
 
 class IndexChunk(Chunk):

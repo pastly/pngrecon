@@ -6,6 +6,7 @@ from ..util.crypto import gen_key
 from ..util.crypto import decrypt
 from argparse import ArgumentDefaultsHelpFormatter
 import zlib
+import lzma
 import os
 
 
@@ -130,6 +131,8 @@ def decompress_data(index_chunk, data):
         return data
     elif m == CompressMethod.Zlib:
         return zlib.decompress(data)
+    elif m == CompressMethod.Lzma:
+        return lzma.decompress(data)
     else:
         fail_hard('Unimplemented compress method', m)
 
