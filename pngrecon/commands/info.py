@@ -1,7 +1,7 @@
 from ..lib.chunk import read_image_stream
 from ..lib.chunk import ChunkType
 from ..lib.chunk import (IndexChunk, DataChunk, CryptInfoChunk)
-from ..util.log import log
+from ..util.log import log_stdout as log
 from ..util.log import fail_hard
 from argparse import ArgumentDefaultsHelpFormatter
 import os

@@ -1,4 +1,4 @@
-from ..util.log import log
+from ..util.log import log_stderr as log
 from ..util.log import fail_hard
 import struct
 import zlib
