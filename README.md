@@ -6,8 +6,6 @@ Optionally compress data.
 
 Optionally encrypt data with a symmetric key derived from a salted password.
 
-- FIXME: add version info to index?
-
 # Install
 
 1. Clone this repo.
