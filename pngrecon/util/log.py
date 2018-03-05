@@ -1,15 +1,15 @@
 import sys
 
 
-def log_stderr(*s):
-    print(*s, file=sys.stderr)
+def log_stderr(*a, **kw):
+    print(*a, file=sys.stderr, **kw)
 
 
-def log_stdout(*s):
-    print(*s)
+def log_stdout(*a, **kw):
+    print(*a, **kw)
 
 
-def fail_hard(*s):
-    if s:
-        log_stderr(*s)
+def fail_hard(*a, **kw):
+    if a:
+        log_stderr(*a, **kw)
     exit(1)
