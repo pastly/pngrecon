@@ -3,6 +3,7 @@ from ..util.log import fail_hard
 import struct
 import zlib
 from enum import Enum
+from functools import lru_cache
 
 
 def read_image_stream(stream):
@@ -105,6 +106,17 @@ class ChunkType(Enum):
     Index = 'deQm'
     Data = 'maTt'
     CryptInfo = 'yyBo'
+
+    @lru_cache(maxsize=8)
+    def from_string(s):
+        ''' Given a string, return the chunk type enum for it. Return None if
+        it doesn't exist '''
+        assert isinstance(s, str)
+        try:
+            t = ChunkType(s)
+        except ValueError:
+            return None
+        return t
 
 
 class EncodingType(Enum):

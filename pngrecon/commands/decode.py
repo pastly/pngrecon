@@ -29,14 +29,9 @@ def keep_and_parse_our_chunks(chunks):
     are '''
     keep_chunks = []
     for chunk in chunks:
-        # TODO: Determining if a chunk is one we care about by using exceptions
-        # is ugly. It may even be uncomfortably slow. Replace with something
-        # better. One idea: an lre_cache'ed function that catches exceptions
-        try:
-            ChunkType(chunk.type)
-        except ValueError:
+        chunk_type = ChunkType.from_string(chunk.type)
+        if chunk_type is None:
             continue
-        chunk_type = ChunkType(chunk.type)
         if chunk_type == ChunkType.Index:
             keep_chunks.append(IndexChunk.from_chunk(chunk))
         elif chunk_type == ChunkType.Data:
