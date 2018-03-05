@@ -1,5 +1,6 @@
 from ..util.log import log_stderr as log
 from cryptography.fernet import Fernet
+from cryptography.fernet import InvalidToken
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -54,4 +55,11 @@ def encrypt(fernet, data):
 
 
 def decrypt(fernet, data):
-    return fernet.decrypt(base64.urlsafe_b64encode(data))
+    ''' Try decrypting data with the given fernet structure. If all goes well,
+    return True and the decrypted data. Else return False and an error
+    message '''
+    try:
+        d = fernet.decrypt(base64.urlsafe_b64encode(data))
+    except InvalidToken as e:
+        return False, 'Passphrase appears to be incorrect'
+    return True, d

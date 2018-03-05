@@ -104,7 +104,10 @@ def decrypt_data(chunks, pw):
         crypt_info_chunk = get_crypt_info_chunk_from_chunks(chunks)
         salt = crypt_info_chunk.salt
         salt, fernet = gen_key(password=pw, salt=salt, for_encryption=False)
-        return decrypt(fernet, data)
+        success, d = decrypt(fernet, data)
+        if not success:
+            fail_hard('Unable to decrypt data:', d)
+        return d
     else:
         fail_hard('Unimplemented decryption type', t)
 
