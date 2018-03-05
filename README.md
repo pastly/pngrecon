@@ -22,6 +22,8 @@ to retrieve it later.
 
 By default, they both read from stdin and write to stdout.
 
+Try `pngrecon encode -h` and `pngrecon decode -h` for a full list of options.
+
 ## Example usage
 
 Demonstrates data can be encoded and then decoded successfully.
@@ -46,10 +48,10 @@ Pass `-c gzip` to `pngrecon encode` to compress encoded data with zlib.
     ChunkType.Data with len 615
     Chunk IEND with len 0
 
-With `pngrecon encode`, give `-e` to encrypt the data using a symmetric key
-derived from the contents of `--key-file`. **Note**: the *entire* contents
-of the `--key-file` will be used, *including any trailing new line
-characters*.
+With `pngrecon encode`, give `-e` to encrypt the data using a symmetric key.
+You may either give pngrecon a passphrase when prompted, or a `--key-file` from
+which to read a passphrase.  **Note**: the *entire* contents of the
+`--key-file` will be used, *including any trailing new line characters*.
 
     (venv) user@host$ echo -n "SuperSecurePassword" > pw.txt
     (venv) user@host$ <file.txt pngrecon encode -e --key-file pw.txt | pngrecon decode --key-file pw.txt

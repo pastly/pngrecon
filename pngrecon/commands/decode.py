@@ -103,7 +103,7 @@ def decrypt_data(chunks, pw):
     elif t == EncryptionType.SaltedPass01:
         crypt_info_chunk = get_crypt_info_chunk_from_chunks(chunks)
         salt = crypt_info_chunk.salt
-        salt, fernet = gen_key(password=pw, salt=salt)
+        salt, fernet = gen_key(password=pw, salt=salt, for_encryption=False)
         return decrypt(fernet, data)
     else:
         fail_hard('Unimplemented decryption type', t)
@@ -165,8 +165,9 @@ def main(args):
     valid, error_msg = validate_chunk_set(chunks)
     if not valid:
         fail_hard(error_msg)
-    if data_is_encrypted(chunks):
-        pw = get_password(args)
+    if data_is_encrypted(chunks) and args.key_file:
+        with open(args.key_file, 'rb') as fd:
+            pw = fd.read()
     else:
         pw = None
     data = completely_decode_chunks(chunks, pw)

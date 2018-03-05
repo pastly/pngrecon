@@ -59,12 +59,6 @@ def encrypt_bytes(b, fernet):
     return encrypt(fernet, b)
 
 
-def get_password(args):
-    assert not os.path.isdir(args.key_file)
-    with open(args.key_file, 'rb') as fd:
-        return fd.read()
-
-
 def completely_encode_stream(stream, args, compress_method):
     ''' The input stream should contain bytes that the user wishes to encode
     into a PNG. If seekable, seek to the start. Otherwise assume we are at the
@@ -75,7 +69,10 @@ def completely_encode_stream(stream, args, compress_method):
     if stream.seekable():
         stream.seek(0, 0)
     if args.encrypt:
-        pw = get_password(args)
+        pw = None
+        if args.key_file:
+            with open(args.key_file, 'rb') as fd:
+                pw = fd.read()
         salt, fernet = gen_key(password=pw)
         encryption_type = EncryptionType.SaltedPass01
     else:
@@ -171,9 +168,7 @@ def main(args):
         source_chunks = get_basic_source_image_chunks()
 
     if args.encrypt:
-        if not args.key_file:
-            fail_hard('--key-file must be specified for encryption')
-        elif os.path.isdir(args.key_file):
+        if args.key_file is not None and os.path.isdir(args.key_file):
             fail_hard(args.key_file, 'must be a file')
     elif args.key_file:
         fail_hard('Don\'t specify --key-file when not doing encryption')
