@@ -13,20 +13,27 @@ def gen_salt():
     return os.urandom(16)
 
 
-def prompt_password(for_encryption):
-    pw1 = ''
-    pw2 = ' '
+def prompt_password(for_encryption=True, empty_okay=False):
+    pw1 = None
+    pw2 = None
     prompt = 'Enter a strong passphrase with which to encrypt this data: ' \
         if for_encryption else 'Enter the passphrase used to encrypt this ' \
         'data: '
-    while pw1 != pw2:
+    while True:
         pw1 = getpass(prompt)
         if for_encryption:
             pw2 = getpass('Again: ')
             if pw1 != pw2:
                 log('Passphrases do not match.')
+            elif pw1 == '' and not empty_okay:
+                log('Passphrase may not be empty')
+            else:
+                break
         else:
-            break
+            if pw1 == '' and not empty_okay:
+                log('Passphrase may not be empty')
+            else:
+                break
     return bytes(pw1, 'utf-8')
 
 
@@ -34,7 +41,7 @@ def gen_key(password=None, salt=None, for_encryption=True):
     ''' If no password given, prompt the user. If no salt, generate a random
     one. if we need to prompt for a password, tell promp_password whether or
     not it is for encryption so it can change its prompt string. '''
-    password = prompt_password(for_encryption) \
+    password = prompt_password(for_encryption=for_encryption) \
         if password is None else password
     salt = gen_salt() if salt is None else salt
     kdf = PBKDF2HMAC(
