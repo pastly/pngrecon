@@ -18,8 +18,8 @@ def gen_parser(sub_p):
     p.add_argument('-o', '--output', type=str, default='/dev/stdout',
                    help='Where to write data')
     p.add_argument(
-        '--password-file', type=str, default=None,
-        help='If the data was encrypted, read decryption password  '
+        '--key-file', type=str, default=None,
+        help='If the data was encrypted, read decryption key  '
         'from this file.')
 
 
@@ -144,11 +144,11 @@ def data_is_encrypted(chunks):
 
 
 def get_password(args):
-    if args.password_file is None:
-        fail_hard('Data is encrypted but not --password-file given')
-    elif os.path.isdir(args.password_file):
-        fail_hard(args.password_file, 'must be a file')
-    with open(args.password_file, 'rb') as fd:
+    if args.key_file is None:
+        fail_hard('Data is encrypted but not --key-file given')
+    elif os.path.isdir(args.key_file):
+        fail_hard(args.key_file, 'must be a file')
+    with open(args.key_file, 'rb') as fd:
         return fd.read()
 
 

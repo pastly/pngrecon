@@ -60,8 +60,8 @@ def encrypt_bytes(b, fernet):
 
 
 def get_password(args):
-    assert not os.path.isdir(args.password_file)
-    with open(args.password_file, 'rb') as fd:
+    assert not os.path.isdir(args.key_file)
+    with open(args.key_file, 'rb') as fd:
         return fd.read()
 
 
@@ -141,8 +141,8 @@ def gen_parser(sub_p):
         '-e', '--encrypt', action='store_true', help='If specified, encrypt '
         'data before encoding')
     p.add_argument(
-        '--password-file', type=str, default=None,
-        help='If encrypting, read password to use for symmetric encryption '
+        '--key-file', type=str, default=None,
+        help='If encrypting, read key to use for symmetric encryption '
         'from this file.')
 
 
@@ -171,12 +171,12 @@ def main(args):
         source_chunks = get_basic_source_image_chunks()
 
     if args.encrypt:
-        if not args.password_file:
-            fail_hard('--password-file must be specified for encryption')
-        elif os.path.isdir(args.password_file):
-            fail_hard(args.password_file, 'must be a file')
-    elif args.password_file:
-        fail_hard('Don\'t specify --password-file when not doing encryption')
+        if not args.key_file:
+            fail_hard('--key-file must be specified for encryption')
+        elif os.path.isdir(args.key_file):
+            fail_hard(args.key_file, 'must be a file')
+    elif args.key_file:
+        fail_hard('Don\'t specify --key-file when not doing encryption')
 
     with open(args.input, 'rb') as fd:
         chunks = completely_encode_stream(fd, args, compress_method)
