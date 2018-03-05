@@ -32,14 +32,7 @@ def keep_and_parse_our_chunks(chunks):
         chunk_type = ChunkType.from_string(chunk.type)
         if chunk_type is None:
             continue
-        if chunk_type == ChunkType.Index:
-            keep_chunks.append(IndexChunk.from_chunk(chunk))
-        elif chunk_type == ChunkType.Data:
-            keep_chunks.append(DataChunk.from_chunk(chunk))
-        elif chunk_type == ChunkType.CryptInfo:
-            keep_chunks.append(CryptInfoChunk.from_chunk(chunk))
-        else:
-            fail_hard('Unknown chunk type', chunk_type)
+        keep_chunks.append(chunk)
     return keep_chunks
 
 

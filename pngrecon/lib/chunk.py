@@ -37,10 +37,21 @@ class Chunk():
         instance. '''
         chunk_len, = struct.unpack('>I', stream.read(4))
         chunk_type, = struct.unpack('>4s', stream.read(4))
-        chunk_type = str(chunk_type, 'utf-8')
+        chunk_type_str = str(chunk_type, 'utf-8')
+        chunk_type = ChunkType.from_string(chunk_type_str)
         chunk_data = stream.read(chunk_len)
         chunk_crc, = struct.unpack('>I', stream.read(4))
-        chunk = Chunk(chunk_type, chunk_data)
+        chunk = Chunk(chunk_type_str, chunk_data)
+        if chunk_type is None:
+            pass
+        elif chunk_type == ChunkType.Index:
+            chunk = IndexChunk.from_chunk(chunk)
+        elif chunk_type == ChunkType.CryptInfo:
+            chunk = CryptInfoChunk.from_chunk(chunk)
+        elif chunk_type == ChunkType.Data:
+            chunk = DataChunk.from_chunk(chunk)
+        else:
+            fail_hard('Can\'t parse chunk', chunk_type, 'from byte stream')
         # it should be valid ... because we just calculated the crc ourselves
         assert chunk.is_valid
         # but what may not be true is that the calculated crc matches the
