@@ -49,7 +49,9 @@ Specifies the type of compression used on the source data in this file.
 Valid values are:
 
 - `1`: No compression used
-- `2`: Data is compressed using zlib
+- `2`: Data is compressed using zlib (gzip)
+- `3`: Data is compressed using lzma (xz)
+
 
 ### Number of Data Chunks
 
