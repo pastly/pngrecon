@@ -17,7 +17,7 @@ def get_chunk_extra_info_index(chunk):
     encoding_type = chunk.encoding_type
     encryption_type = chunk.encryption_type
     compress_method = chunk.compress_method
-    num_data_chunks = 'Claming {} data chunks'.format(chunk.num_data_chunks)
+    num_data_chunks = 'Claiming {} data chunks'.format(chunk.num_data_chunks)
     return [encoding_type, encryption_type, compress_method, num_data_chunks]
 
 

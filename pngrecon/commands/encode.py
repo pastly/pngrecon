@@ -141,6 +141,9 @@ def gen_parser(sub_p):
         '--key-file', type=str, default=None,
         help='If encrypting, read key to use for symmetric encryption '
         'from this file.')
+    p.add_argument(
+        '--chunk-max-bytes', type=int, default=MAX_DATA_CHUNK_BYTES,
+        help='Maximum nubmer of bytes per PNG chunk')
 
 
 def main(args):
