@@ -269,9 +269,12 @@ class CryptInfoChunk(Chunk):
         return self.length == 16
 
 
-# The max size in the PNG spec is "like" 4 GiB (based on the chunk length field
-# in chunk headers being a 32-bit uint) but we don't really need to try to hit
-# that. Besides, having smaller chunks means we can solve fun serialization
-# problems!
-MAX_DATA_CHUNK_BYTES = 100 * 1024 * 1024  # 100 MiB
+# The rough maximum internal buffer size to use during encoding, which will
+# consequently impact the maximum chunk size in the .png. If the data to encode
+# is highly compressible, this will get wonky.
+#
+# The max size of a chunk in the PNG spec is "like" 4 GiB (based on the chunk
+# length field in chunk headers being a 32-bit uint), so do not approach this
+# value. Also, smaller chunks means fun serialization problems to solve :)
+TARGET_MAX_BUFFER_BYTES = 100 * 1024 * 1024  # 100 MiB
 PNG_SIG = b'\x89PNG\r\n\x1a\n'

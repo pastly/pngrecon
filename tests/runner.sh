@@ -15,7 +15,7 @@ for D in ./*/; do
     N="$(basename $D)"
     mkdir -p "$T/$D"
     pushd $D>/dev/null
-    bash test.sh "$T/$D" && printf "OK   $N\n" || printf "FAIL $N\n" &
+    bash test.sh "$T/$D" && printf "OK   $N\n" || { printf "FAIL $N\n" ; exit 1; } &
     popd>/dev/null
 done
 popd>/dev/null

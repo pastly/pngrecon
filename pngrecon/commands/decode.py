@@ -96,18 +96,21 @@ def decrypt_data(chunks, pw):
     index_chunk = get_index_chunk_from_chunks(chunks)
     data_chunks = [c for c in chunks if isinstance(c, DataChunk)]
     data_chunks = sorted(data_chunks, key=lambda c: c.index)
-    data = b''.join([c.data for c in data_chunks])
+    #data = b''.join([c.data for c in data_chunks])
     t = index_chunk.encryption_type
     if t == EncryptionType.No:
-        return data
+        return b''.join([c.data for c in data_chunks])
     elif t == EncryptionType.SaltedPass01:
         crypt_info_chunk = get_crypt_info_chunk_from_chunks(chunks)
         salt = crypt_info_chunk.salt
         salt, fernet = gen_key(password=pw, salt=salt, for_encryption=False)
-        success, d = decrypt(fernet, data)
-        if not success:
-            fail_hard('Unable to decrypt data:', d)
-        return d
+        data = b''
+        for chunk in data_chunks:
+            success, d = decrypt(fernet, chunk.data)
+            if not success:
+                fail_hard('Unable to decrypt data:', d)
+            data += d
+        return data
     else:
         fail_hard('Unimplemented decryption type', t)
 

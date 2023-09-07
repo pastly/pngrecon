@@ -1,6 +1,6 @@
 from ..lib.chunk import read_image_stream
 from ..lib.chunk import (CompressMethod, EncodingType, EncryptionType)
-from ..lib.chunk import (PNG_SIG, MAX_DATA_CHUNK_BYTES)
+from ..lib.chunk import (PNG_SIG, TARGET_MAX_BUFFER_BYTES)
 from ..lib.chunk import (Chunk, IndexChunk, DataChunk, CryptInfoChunk)
 from ..util.log import fail_hard
 from ..util.crypto import gen_key
@@ -26,37 +26,54 @@ def encode_source_and_data_chunks_together(args, source_chunks, data_chunks):
         fd.write(source_chunks[-1].raw_data)
 
 
-def break_into_bites(b, max_bite_len):
-    assert isinstance(b, bytes)
-    bites = []
-    while len(b) > max_bite_len:
-        bites.append(b[0:max_bite_len])
-        b = b[max_bite_len:]
+def break_into_bites(iter, max_bite_len):
+    b = b''
+    for i in iter:
+        b += i
+        while len(b) > max_bite_len:
+            yield b[0:max_bite_len]
+            b = b[max_bite_len:]
     if len(b) > 0:
-        bites.append(b)
-    return bites
+        yield b
 
 
-def compress_stream(stream, compress_method):
+def compress_stream(stream, compress_method, max_size):
     assert isinstance(compress_method, CompressMethod)
+    if compress_method == CompressMethod.Zlib:
+        compressor = zlib.compressobj()
+    elif compress_method == CompressMethod.Lzma:
+        compressor = lzma.LZMACompressor()
+    else:
+        assert compress_method == CompressMethod.No
+        compressor = None
     b = b''
     while len(stream.peek(1)) > 0:
-        b += stream.read()
-    if compress_method == CompressMethod.No:
-        return b
-    elif compress_method == CompressMethod.Zlib:
-        return zlib.compress(b)
-    elif compress_method == CompressMethod.Lzma:
-        return lzma.compress(b)
-    else:
-        fail_hard('Unimplemented compress_method', compress_method)
+        b = stream.read(max_size)
+        if compressor:
+            data = compressor.compress(b)
+            if len(data):
+                yield data
+        else:
+            yield b
+    if compressor:
+        data = compressor.flush()
+        if len(data):
+            yield data
 
 
-def encrypt_bytes(b, fernet):
-    assert isinstance(b, bytes)
+def encrypt_bytes(iter, fernet, max_size):
     if not fernet:
-        return b
-    return encrypt(fernet, b)
+        for i in iter:
+            yield i
+    else:
+        b = b''
+        for i in iter:
+            b += i
+            while len(b) > max_size:
+                yield encrypt(fernet, b[:max_size])
+                b = b[max_size:]
+        if len(b):
+            yield encrypt(fernet, b)
 
 
 def completely_encode_stream(stream, args, compress_method):
@@ -78,20 +95,32 @@ def completely_encode_stream(stream, args, compress_method):
     else:
         salt, fernet = None, None
         encryption_type = EncryptionType.No
-    b = encrypt_bytes(compress_stream(stream, compress_method), fernet)
-    bites = break_into_bites(b, MAX_DATA_CHUNK_BYTES)
-    index_chunk = [IndexChunk(
-        EncodingType.SingleFile, encryption_type, compress_method, len(bites))]
-    crypt_info_chunk = [CryptInfoChunk(salt)] if args.encrypt else []
-    data_chunks = [DataChunk(i, bite) for i, bite in enumerate(bites)]
-    all_chunks = index_chunk + crypt_info_chunk + data_chunks
-    # This random shuffle is soley for defensive programming against lazy
-    # programmers. When an image is edited, the PNG standard allows for chunks
-    # to be reordered (to some extent; not completely randomly). Therefore,
-    # pngrecon decoders should NOT be expecting our chunks to be in a specific
-    # order.
-    random.shuffle(all_chunks)
-    return all_chunks
+    b = encrypt_bytes(
+        compress_stream(stream, compress_method, args.buffer_max_bytes),
+        fernet,
+        args.buffer_max_bytes)
+    #bites = break_into_bites(b, args.buffer_max_bytes)
+    bites = b
+    if args.encrypt:
+        yield CryptInfoChunk(salt)
+    n = 0
+    for i, bite in enumerate(bites):
+        yield DataChunk(i, bite)
+        n += 1
+    yield IndexChunk(EncodingType.SingleFile, encryption_type, compress_method, n)
+    #################################################
+    #crypt_info_chunk = [CryptInfoChunk(salt)] if args.encrypt else []
+    #data_chunks = [DataChunk(i, bite) for i, bite in enumerate(bites)]
+    #index_chunk = [IndexChunk(
+    #    EncodingType.SingleFile, encryption_type, compress_method, len(data_chunks))]
+    #all_chunks = index_chunk + crypt_info_chunk + data_chunks
+    ## This random shuffle is soley for defensive programming against lazy
+    ## programmers. When an image is edited, the PNG standard allows for chunks
+    ## to be reordered (to some extent; not completely randomly). Therefore,
+    ## pngrecon decoders should NOT be expecting our chunks to be in a specific
+    ## order.
+    #random.shuffle(all_chunks)
+    #return all_chunks
 
 
 def get_provided_source_image_chunks(args):
@@ -142,8 +171,9 @@ def gen_parser(sub_p):
         help='If encrypting, read key to use for symmetric encryption '
         'from this file.')
     p.add_argument(
-        '--chunk-max-bytes', type=int, default=MAX_DATA_CHUNK_BYTES,
-        help='Maximum nubmer of bytes per PNG chunk')
+        '--buffer-max-bytes', type=int, default=TARGET_MAX_BUFFER_BYTES,
+        help='Target maximum nubmer of bytes to encode at once. Weird (but '
+        'safe) stuff happens with highly compressible data.')
 
 
 def main(args):
@@ -178,4 +208,4 @@ def main(args):
 
     with open(args.input, 'rb') as fd:
         chunks = completely_encode_stream(fd, args, compress_method)
-    encode_source_and_data_chunks_together(args, source_chunks, chunks)
+        encode_source_and_data_chunks_together(args, source_chunks, chunks)
