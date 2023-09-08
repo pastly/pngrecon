@@ -4,7 +4,7 @@ import pngrecon.commands.decode
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 
-PNG_RECON_VERSION = '0.2.0'
+PNG_RECON_VERSION = '0.2.1'
 
 
 def create_parser():
