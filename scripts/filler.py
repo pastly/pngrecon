@@ -179,17 +179,20 @@ def next_work(db_con):
     cur.execute('SELECT rowid, * FROM work WHERE is_done = FALSE LIMIT 1')
     return cur.fetchone()
 
-def encode(root: Root, in_name: Path, out_fname: Path, pngrecon, keyfile):
-    tar_args = ['tar', '-c', '-C', str(root.in_p), str(in_name)]
-    png_args = [pngrecon, 'encode', '-e', '--key-file', keyfile, '-o', str(out_fname)]
-    tar = subprocess.Popen(tar_args, stdout=subprocess.PIPE)
-    png = subprocess.run(png_args, stdin=tar.stdout)
-    return png.returncode == 0
+def encode(root: Root, in_name: Path, out_dname: Path, pngrecon, keyfile, max_file_size: int, style: int):
+    if style == BUNDLE_LEAF_DIR:
+        tar_args = ['tar', '-c', '-C', str(root.in_p), str(in_name)]
+        tar = subprocess.Popen(tar_args, stdout=subprocess.PIPE)
+        in_fd = tar.stdout
+    elif style == SPLIT_FILE:
+        in_f = deepcopy(root.in_p)
+        in_f.append(in_name)
+        in_fd = open(str(in_f), 'rb')
+    else:
+        assert False
+    return split_encode(in_fd, out_dname, pngrecon, keyfile, max_file_size)
 
-def split_encode(root: Root, in_name: Path, out_dname: Path, pngrecon, keyfile, max_file_size: int):
-    in_f = deepcopy(root.in_p)
-    in_f.append(in_name)
-    in_fd = open(str(in_f), 'rb')
+def split_encode(in_fd, out_dname: Path, pngrecon, keyfile, max_file_size: int):
     eof = False
     n = 1
     buf_size = 4 * 1024 * 1024
@@ -255,29 +258,16 @@ def main(conf):
             time.sleep(30)
             continue
         out_dname = deepcopy(root.out_p)
-        out_dname.append(Path([str(_) for _ in id_path[:-1]], False))
-        if root.opts['style'] == BUNDLE_LEAF_DIR:
-            os.makedirs(str(out_dname), exist_ok=True)
-            out_fname = deepcopy(out_dname)
-            out_fname.append(PathComponent(str(id_path[-1]) + '.png'))
-            log('Doing', subpath, 'into', out_fname)
-            did_ok = encode(
-                root, subpath, out_fname,
-                conf['pngrecon']['path'],
-                conf['pngrecon']['keyfile'],
-            )
-        elif root.opts['style'] == SPLIT_FILE:
-            out_dname.append(PathComponent(str(id_path[-1])))
-            os.makedirs(str(out_dname), exist_ok=True)
-            log('Doing', subpath, 'into', out_dname)
-            did_ok = split_encode(
-                root, subpath, out_dname,
-                conf['pngrecon']['path'],
-                conf['pngrecon']['keyfile'],
-                root.opts['split_file_size_limit'],
-            )
-        else:
-            assert False
+        out_dname.append(Path([str(_) for _ in id_path], False))
+        os.makedirs(str(out_dname), exist_ok=True)
+        log('Doing', subpath, 'into', out_dname)
+        did_ok = encode(
+            root, subpath, out_dname,
+            conf['pngrecon']['path'],
+            conf['pngrecon']['keyfile'],
+            root.opts['split_file_size_limit'],
+            root.opts['style'],
+        )
         if did_ok:
             cur.execute('BEGIN')
             cur.execute('UPDATE work SET is_done = TRUE WHERE rowid = ?', (row['rowid'],))
