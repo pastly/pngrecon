@@ -251,8 +251,8 @@ def main(conf):
         root_path, subpath, id_path = get_path(db_con, row['obj_id'])
         root = [r for r in roots if r.in_p == root_path][0]
         if get_dir_size(root.out_p) > root.opts['outdir_size_limit']:
-            log(output, 'too big')
-            time.sleep(5)
+            log(str(root.out_p), 'too big')
+            time.sleep(30)
             continue
         out_dname = deepcopy(root.out_p)
         out_dname.append(Path([str(_) for _ in id_path[:-1]], False))
