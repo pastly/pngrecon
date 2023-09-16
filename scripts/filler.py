@@ -16,14 +16,12 @@ import subprocess
 import os
 import sys
 import glob
-import hashlib
 import time
 import pathlib
-import fcntl
 from dataclasses import dataclass
 from typing import List, Union
 from copy import deepcopy
-from tempfile import TemporaryFile
+from tempfile import TemporaryDirectory
 from concurrent.futures import ProcessPoolExecutor
 
 BUNDLE_LEAF_DIR = 1
@@ -207,55 +205,24 @@ def mark_done(root: Root, in_name: Path, db_con, rowid, id_path: List[int]):
     cur.execute('COMMIT')
 
 def encode(root: Root, in_name: Path, out_dname: Path, pngrecon, keyfile, max_file_size: int, style: int):
-    #if style == BUNDLE_LEAF_DIR:
-    #    tar_args = ['tar', '-c', '-C', str(root.in_p), str(in_name)]
-    #    tar = subprocess.Popen(tar_args, stdout=subprocess.PIPE)
-    #    in_fd = tar.stdout
-    #elif style == SPLIT_FILE:
-    #    in_f = deepcopy(root.in_p)
-    #    in_f.append(in_name)
-    #    in_fd = open(str(in_f), 'rb')
-    #else:
-    #    assert False
-    tar_args = ['tar', '-c', '-C', str(root.in_p), str(in_name)]
-    tar = subprocess.Popen(tar_args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    #fcntl.fcntl(tar.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
-    #in_fd = tar.stdout
-    return split_encode(tar, out_dname, pngrecon, keyfile, max_file_size)
-
-
-def read_chunks(fd, size):
-    while True:
-        chunk = fd.read1(size)
-        if not len(chunk):
-            break
-        yield chunk
-
-def split_encode(tar_proc, out_dname: Path, pngrecon, keyfile, max_file_size: int):
-    n = 1
-    tar_done = False
-    while not tar_done:
-        with TemporaryFile() as tmp_fd:
-            b = b''
-            while len(b) < max_file_size:
-                b += next(read_chunks(tar_proc.stdout, 10))
-            tmp_fd.write(b)
-            tmp_fd.seek(0, 0)
+    with TemporaryDirectory() as temp_d:
+        tar_args = ['tar', '-c', '-C', str(root.in_p), str(in_name)]
+        tar = subprocess.Popen(tar_args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        split_args = ['split', '--bytes', str(int(max_file_size)), '-', temp_d + '/pngrecon-']
+        split = subprocess.Popen(split_args, stdin=tar.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if tar.wait() != 0:
+            return False
+        if split.wait() != 0:
+            return False
+        n = 1
+        for temp_fname in sorted(glob.glob(temp_d + '/pngrecon-*')):
             out_f = deepcopy(out_dname)
             out_f.append(PathComponent(f'{n:03}.png'))
-            png_args = [pngrecon, 'encode', '-e', '--key-file', keyfile, '-o', str(out_f)]
-            print(png_args)
-            png = subprocess.run(png_args, stdin=tmp_fd)
+            png_args = [pngrecon, 'encode', '-e', '--key-file', keyfile, '-i', temp_fname, '-o', str(out_f)]
+            png = subprocess.run(png_args)
             if png.returncode != 0:
                 return False
-            #try:
-            #    r = tar_proc.wait(0.250)
-            #except subprocess.TimeoutExpired:
-            #    tar_done = False
-            #else:
-            #    tar_done = True
-            #    break
-        n += 1
+            n += 1
     return True
 
 
@@ -307,11 +274,11 @@ def main(conf):
     insert_roots(db_con, roots)
     walk_roots(db_con, roots)
     insert_work(db_con)
-    MAX_JOBS = 1
-    rows = next_n_work(db_con, MAX_JOBS)
+    max_jobs = int(conf['general']['max_jobs'])
+    rows = next_n_work(db_con, max_jobs)
     while len(rows):
         futures = []
-        with ProcessPoolExecutor(max_workers=MAX_JOBS) as executor:
+        with ProcessPoolExecutor(max_workers=max_jobs) as executor:
             for row in rows:
                 root_path, subpath, id_path = get_path(db_con, row['obj_id'])
                 root = [r for r in roots if r.in_p == root_path][0]
@@ -341,7 +308,7 @@ def main(conf):
                 if not did_ok:
                     log('didnt do ok :(')
                     return 1
-            rows = next_n_work(db_con, MAX_JOBS-len(futures))
+        rows = next_n_work(db_con, max_jobs)
     return 0
 
 if __name__ == '__main__':
