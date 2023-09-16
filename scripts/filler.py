@@ -19,10 +19,12 @@ import glob
 import hashlib
 import time
 import pathlib
+import fcntl
 from dataclasses import dataclass
 from typing import List, Union
 from copy import deepcopy
 from tempfile import TemporaryFile
+from concurrent.futures import ProcessPoolExecutor
 
 BUNDLE_LEAF_DIR = 1
 SPLIT_FILE = 2
@@ -174,51 +176,107 @@ def insert_work(db_con):
         cur.execute('INSERT INTO work VALUES (?, ?)', (a['rowid'], False))
     db_con.commit()
 
-def next_work(db_con):
+def next_n_work(db_con, n):
     cur = db_con.cursor()
-    cur.execute('SELECT rowid, * FROM work WHERE is_done = FALSE LIMIT 1')
-    return cur.fetchone()
+    cur.execute('SELECT rowid, * FROM work WHERE is_done = FALSE LIMIT ?', (n,))
+    return cur.fetchall()
 
-def encode(root: Root, in_name: Path, out_dname: Path, pngrecon, keyfile, max_file_size: int, style: int):
-    if style == BUNDLE_LEAF_DIR:
-        tar_args = ['tar', '-c', '-C', str(root.in_p), str(in_name)]
-        tar = subprocess.Popen(tar_args, stdout=subprocess.PIPE)
-        in_fd = tar.stdout
-    elif style == SPLIT_FILE:
-        in_f = deepcopy(root.in_p)
-        in_f.append(in_name)
-        in_fd = open(str(in_f), 'rb')
+def encode_and_mark_done(root: Root, in_name: Path, id_path: List[int], out_dname: Path, rowid: int, pngrecon, keyfile, max_file_size: int, style: int, db_fname: str):
+    db_con = sqlite3.connect(db_fname)
+    if not encode(root, in_name, out_dname, pngrecon, keyfile, max_file_size, style):
+        return False
+    log('Done', in_name)
+    mark_done(root, in_name, db_con, rowid, id_path)
+    return True
+
+def mark_done(root: Root, in_name: Path, db_con, rowid, id_path: List[int]):
+    cur = db_con.cursor()
+    cur.execute('BEGIN')
+    cur.execute('UPDATE work SET is_done = TRUE WHERE rowid = ?', (rowid,))
+    cmds = []
+    if root.opts['style'] == BUNDLE_LEAF_DIR:
+        p = deepcopy(root.in_p)
+        p.append(in_name)
+        for fname in pathlib.Path(str(p)).glob('*'):
+            cmds.append((os.path.basename(fname), id_path[-1], root.opts['style']))
+    elif root.opts['style'] == SPLIT_FILE:
+        cmds.append((os.path.basename(str(in_name)), id_path[-1], root.opts['style']))
     else:
         assert False
-    return split_encode(in_fd, out_dname, pngrecon, keyfile, max_file_size)
+    cur.executemany('INSERT INTO encoded_location VALUES(?, ?, ?)', cmds)
+    cur.execute('COMMIT')
 
-def split_encode(in_fd, out_dname: Path, pngrecon, keyfile, max_file_size: int):
-    eof = False
+def encode(root: Root, in_name: Path, out_dname: Path, pngrecon, keyfile, max_file_size: int, style: int):
+    #if style == BUNDLE_LEAF_DIR:
+    #    tar_args = ['tar', '-c', '-C', str(root.in_p), str(in_name)]
+    #    tar = subprocess.Popen(tar_args, stdout=subprocess.PIPE)
+    #    in_fd = tar.stdout
+    #elif style == SPLIT_FILE:
+    #    in_f = deepcopy(root.in_p)
+    #    in_f.append(in_name)
+    #    in_fd = open(str(in_f), 'rb')
+    #else:
+    #    assert False
+    tar_args = ['tar', '-c', '-C', str(root.in_p), str(in_name)]
+    tar = subprocess.Popen(tar_args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    #fcntl.fcntl(tar.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
+    #in_fd = tar.stdout
+    return split_encode(tar, out_dname, pngrecon, keyfile, max_file_size)
+
+
+def read_chunks(fd, size):
+    while True:
+        chunk = fd.read1(size)
+        if not len(chunk):
+            break
+        yield chunk
+
+def split_encode(tar_proc, out_dname: Path, pngrecon, keyfile, max_file_size: int):
     n = 1
-    buf_size = 4 * 1024 * 1024
-    while not eof:
+    tar_done = False
+    while not tar_done:
         with TemporaryFile() as tmp_fd:
-            budget = max_file_size
-            while budget > 0 and not eof:
-                b = in_fd.read(min(buf_size, budget))
-                if not len(b):
-                    eof = True
-                    break
-                tmp_fd.write(b)
-                budget -= len(b)
-            if not len(b) and n > 1:
-                # n > 1 check because for empty files I've decided we want to
-                # output an image
-                continue
+            b = b''
+            while len(b) < max_file_size:
+                b += next(read_chunks(tar_proc.stdout, 10))
+            tmp_fd.write(b)
             tmp_fd.seek(0, 0)
             out_f = deepcopy(out_dname)
             out_f.append(PathComponent(f'{n:03}.png'))
             png_args = [pngrecon, 'encode', '-e', '--key-file', keyfile, '-o', str(out_f)]
+            print(png_args)
             png = subprocess.run(png_args, stdin=tmp_fd)
             if png.returncode != 0:
                 return False
+            #try:
+            #    r = tar_proc.wait(0.250)
+            #except subprocess.TimeoutExpired:
+            #    tar_done = False
+            #else:
+            #    tar_done = True
+            #    break
         n += 1
     return True
+
+
+def wait_for_done_jobs(jobs):
+    # log('Waiting for 1 of', len(jobs), 'jobs to finish before continuing')
+    job_to_delete = None
+    while True:
+        for j in jobs:
+            if not j.done():
+                continue
+            did_ok = j.result(0.001)
+            if not did_ok:
+                return False, jobs
+            job_to_delete = j
+            break
+        if job_to_delete:
+            break
+        else:
+            time.sleep(1)
+    jobs = [j for j in jobs if j != job_to_delete]
+    return True, jobs
 
 
 def main(conf):
@@ -249,44 +307,41 @@ def main(conf):
     insert_roots(db_con, roots)
     walk_roots(db_con, roots)
     insert_work(db_con)
-    row = next_work(db_con)
-    while row:
-        root_path, subpath, id_path = get_path(db_con, row['obj_id'])
-        root = [r for r in roots if r.in_p == root_path][0]
-        if get_dir_size(root.out_p) > root.opts['outdir_size_limit']:
-            log(str(root.out_p), 'too big')
-            time.sleep(30)
-            continue
-        out_dname = deepcopy(root.out_p)
-        out_dname.append(Path([str(_) for _ in id_path], False))
-        os.makedirs(str(out_dname), exist_ok=True)
-        log('Doing', subpath, 'into', out_dname)
-        did_ok = encode(
-            root, subpath, out_dname,
-            conf['pngrecon']['path'],
-            conf['pngrecon']['keyfile'],
-            root.opts['split_file_size_limit'],
-            root.opts['style'],
-        )
-        if did_ok:
-            cur.execute('BEGIN')
-            cur.execute('UPDATE work SET is_done = TRUE WHERE rowid = ?', (row['rowid'],))
-            cmds = []
-            if root.opts['style'] == BUNDLE_LEAF_DIR:
-                p = deepcopy(root.in_p)
-                p.append(subpath)
-                for fname in pathlib.Path(str(p)).glob('*'):
-                    cmds.append((os.path.basename(fname), id_path[-1], root.opts['style']))
-            elif root.opts['style'] == SPLIT_FILE:
-                cmds.append((os.path.basename(str(subpath)), id_path[-1], root.opts['style']))
-            else:
-                assert False
-            cur.executemany('INSERT INTO encoded_location VALUES(?, ?, ?)', cmds)
-            cur.execute('COMMIT')
-        else:
-            log('didnt do ok :(')
-            return 1
-        row = next_work(db_con)
+    MAX_JOBS = 1
+    rows = next_n_work(db_con, MAX_JOBS)
+    while len(rows):
+        futures = []
+        with ProcessPoolExecutor(max_workers=MAX_JOBS) as executor:
+            for row in rows:
+                root_path, subpath, id_path = get_path(db_con, row['obj_id'])
+                root = [r for r in roots if r.in_p == root_path][0]
+                block_fname = deepcopy(root.out_p)
+                block_fname.append(PathComponent('filler.waiting'))
+                while os.path.exists(str(block_fname)) or get_dir_size(root.out_p) > root.opts['outdir_size_limit']:
+                    if not os.path.exists(str(block_fname)):
+                        log('Creating', str(block_fname))
+                        with open(str(block_fname), 'wt') as fd:
+                            fd.write('hi\n')
+                    log(str(root.out_p), 'too big')
+                    time.sleep(60)
+                out_dname = deepcopy(root.out_p)
+                out_dname.append(Path([str(_) for _ in id_path], False))
+                os.makedirs(str(out_dname), exist_ok=True)
+                log('Doing', subpath, 'into', out_dname)
+                futures.append(executor.submit(encode_and_mark_done,
+                    root, subpath, id_path, out_dname, row['rowid'],
+                    conf['pngrecon']['path'],
+                    conf['pngrecon']['keyfile'],
+                    root.opts['split_file_size_limit'],
+                    root.opts['style'],
+                    conf['db']['fname'],
+                ))
+            while len(futures):
+                did_ok, futures = wait_for_done_jobs(futures)
+                if not did_ok:
+                    log('didnt do ok :(')
+                    return 1
+            rows = next_n_work(db_con, MAX_JOBS-len(futures))
     return 0
 
 if __name__ == '__main__':
